@@ -1,0 +1,4 @@
+<resources>
+    <!-- Base theme; Compose (DiceStatsTheme) drives the actual colors at runtime. -->
+    <style name="Theme.DiceStats" parent="android:Theme.Material.Light.NoActionBar" />
+</resources>
