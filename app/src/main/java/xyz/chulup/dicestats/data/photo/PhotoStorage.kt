@@ -26,6 +26,15 @@ class PhotoStorage(context: Context) {
             ?.sortedByDescending { it.lastModified() }
             ?: emptyList()
 
+    /** Deletes the given photos. Only files inside the rolls directory are touched. */
+    fun deletePhotos(paths: Collection<String>) {
+        val dir = rollsDir
+        for (path in paths) {
+            val file = File(path)
+            if (file.parentFile == dir) file.delete()
+        }
+    }
+
     private companion object {
         const val DIR_NAME = "rolls"
     }

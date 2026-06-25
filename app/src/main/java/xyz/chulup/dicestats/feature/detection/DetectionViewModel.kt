@@ -53,6 +53,13 @@ class DetectionViewModel(
         detect()
     }
 
+    /** Deletes the captured photo so a rejected roll never reaches the log (retake). */
+    fun discardPhoto() {
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching { File(photoPath).delete() }
+        }
+    }
+
     private fun detect() {
         viewModelScope.launch {
             _uiState.value = DetectionUiState.Loading

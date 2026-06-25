@@ -33,7 +33,13 @@ fun DiceStatsNavHost() {
         }
         composable(Routes.CAPTURE) {
             CaptureScreen(
-                onPhotoSaved = { navController.popBackStack() },
+                // Go straight to detection on the captured photo; drop capture from the
+                // back stack so "back" from detection returns to the roll log.
+                onPhotoSaved = { path ->
+                    navController.navigate(Routes.detection(path)) {
+                        popUpTo(Routes.CAPTURE) { inclusive = true }
+                    }
+                },
                 onBack = { navController.popBackStack() },
             )
         }
@@ -49,6 +55,12 @@ fun DiceStatsNavHost() {
             DetectionScreen(
                 photoPath = photoPath,
                 onBack = { navController.popBackStack() },
+                // Retake: reopen the camera, replacing this detection on the back stack.
+                onRetake = {
+                    navController.navigate(Routes.CAPTURE) {
+                        popUpTo(Routes.DETECTION) { inclusive = true }
+                    }
+                },
             )
         }
     }

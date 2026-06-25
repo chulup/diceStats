@@ -1,8 +1,26 @@
 <resources>
     <string name="app_name">DiceStats</string>
     <string name="back">Back</string>
+    <string name="roll_log_capture">Roll</string>
+    <string name="roll_log_empty">No rolls yet. Tap Roll to capture one.</string>
+    <string name="roll_photo_desc">Roll photo</string>
+    <string name="selection_clear">Clear selection</string>
+    <string name="selection_delete">Delete selected</string>
+    <plurals name="selection_count">
+        <item quantity="one">%1$d selected</item>
+        <item quantity="other">%1$d selected</item>
+    </plurals>
+    <string name="delete_dialog_title">Delete photos?</string>
+    <plurals name="delete_dialog_message">
+        <item quantity="one">Delete %1$d photo? This cannot be undone.</item>
+        <item quantity="other">Delete %1$d photos? This cannot be undone.</item>
+    </plurals>
+    <string name="delete_confirm">Delete</string>
+    <string name="dialog_cancel">Cancel</string>
+    <string name="selected_indicator">Selected</string>
     <string name="detection_title">Detected dice</string>
     <string name="detection_photo_desc">Captured roll with detected dice</string>
+    <string name="detection_retake">Retake photo</string>
     <string name="detection_error">Detection failed: %1$s</string>
     <plurals name="detection_count">
         <item quantity="zero">No dice detected</item>

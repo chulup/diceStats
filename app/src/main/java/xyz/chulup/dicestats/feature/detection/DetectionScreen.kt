@@ -3,12 +3,16 @@ package xyz.chulup.dicestats.feature.detection
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -42,6 +46,7 @@ import java.io.File
 fun DetectionScreen(
     photoPath: String,
     onBack: () -> Unit,
+    onRetake: () -> Unit,
     viewModel: DetectionViewModel = viewModel(factory = DetectionViewModel.factory(photoPath)),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -59,6 +64,21 @@ fun DetectionScreen(
                     }
                 },
             )
+        },
+        bottomBar = {
+            Button(
+                onClick = {
+                    viewModel.discardPhoto()
+                    onRetake()
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+            ) {
+                Icon(Icons.Default.Refresh, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text(stringResource(R.string.detection_retake))
+            }
         },
     ) { padding ->
         Box(

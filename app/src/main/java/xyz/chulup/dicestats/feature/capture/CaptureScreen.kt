@@ -42,7 +42,7 @@ import xyz.chulup.dicestats.data.photo.PhotoStorage
 private const val TAG = "CaptureScreen"
 
 @Composable
-fun CaptureScreen(onPhotoSaved: () -> Unit, onBack: () -> Unit) {
+fun CaptureScreen(onPhotoSaved: (String) -> Unit, onBack: () -> Unit) {
     val context = LocalContext.current
     var hasPermission by remember { mutableStateOf(context.hasCameraPermission()) }
 
@@ -73,7 +73,7 @@ fun CaptureScreen(onPhotoSaved: () -> Unit, onBack: () -> Unit) {
 }
 
 @Composable
-private fun CameraCapture(onPhotoSaved: () -> Unit) {
+private fun CameraCapture(onPhotoSaved: (String) -> Unit) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val storage = remember { PhotoStorage(context) }
@@ -111,7 +111,7 @@ private fun CameraCapture(onPhotoSaved: () -> Unit) {
                     ContextCompat.getMainExecutor(context),
                     object : ImageCapture.OnImageSavedCallback {
                         override fun onImageSaved(results: ImageCapture.OutputFileResults) {
-                            onPhotoSaved()
+                            onPhotoSaved(file.absolutePath)
                         }
 
                         override fun onError(exc: ImageCaptureException) {
