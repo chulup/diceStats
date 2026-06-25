@@ -28,12 +28,14 @@ internal object DiceDetectionPipeline {
         /** Morphology radii (square structuring element): open removes speckle, close fills pips. */
         val openRadius: Int = 1,
         val closeRadius: Int = 3,
-        val minAreaFraction: Float = 0.004f,
+        // Low enough to catch dice photographed at arm's length (small in frame).
+        val minAreaFraction: Float = 0.0008f,
         val maxAreaFraction: Float = 0.12f,
         // A d6 top face is close to square; this rejects elongated blobs (fingers, edges).
         val minAspect: Float = 0.7f,
         val maxAspect: Float = 1.4f,
-        val minFill: Float = 0.5f,
+        // A die is a solid saturated square; this rejects looser blobs (paper/pencil bits).
+        val minFill: Float = 0.6f,
         /** A blob is split where the distance transform exceeds this fraction of its max. */
         val seedFraction: Float = 0.55f,
     )

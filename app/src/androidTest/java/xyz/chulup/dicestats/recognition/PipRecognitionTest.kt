@@ -1,6 +1,6 @@
 package xyz.chulup.dicestats.recognition
 
-import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.google.gson.Gson
@@ -11,8 +11,6 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.opencv.android.OpenCVLoader
-import java.io.DataInputStream
-import java.io.InputStream
 
 /**
  * On-device end-to-end recognition test: runs [DieRecognizer] (saturation
@@ -20,7 +18,8 @@ import java.io.InputStream
  * each die's location and pip value match the ground truth in `tests.txt`.
  *
  * Pip counting needs OpenCV's native library, so this is an instrumented test
- * rather than a JVM unit test. Fixtures are PPM (downscaled, raw) in
+ * rather than a JVM unit test. Fixtures are JPEGs (downscaled to ~1280px, the
+ * app's working size, so far-away dice keep enough detail to read) in
  * `androidTest/assets/photos/`. The touching-dice photo (6) is skipped — the
  * detector assumes dice do not touch.
  */
@@ -51,8 +50,11 @@ class PipRecognitionTest {
         for (case in spec.tests) {
             if (case.picture_name in skip) continue
 
-            val fixture = case.picture_name.removeSuffix(".jpg") + ".ppm"
-            val bitmap = assets.open("photos/$fixture").use { readPpm(it) }
+            val bitmap = assets.open("photos/${case.picture_name}").use { BitmapFactory.decodeStream(it) }
+            if (bitmap == null) {
+                failures += "${case.picture_name}: could not decode"
+                continue
+            }
             val detected = runBlocking { recognizer.recognize(bitmap) }
 
             if (detected.size != case.dice.size) {
@@ -72,36 +74,6 @@ class PipRecognitionTest {
         }
 
         assertEquals("Recognition mismatches:\n" + failures.joinToString("\n"), 0, failures.size)
-    }
-
-    private fun readPpm(stream: InputStream): Bitmap {
-        val input = DataInputStream(stream.buffered())
-        require(readToken(input) == "P6") { "not a P6 PPM" }
-        val width = readToken(input).toInt()
-        val height = readToken(input).toInt()
-        readToken(input) // maxval
-
-        val rgb = ByteArray(width * height * 3)
-        input.readFully(rgb)
-        val argb = IntArray(width * height)
-        for (i in argb.indices) {
-            val r = rgb[i * 3].toInt() and 0xFF
-            val g = rgb[i * 3 + 1].toInt() and 0xFF
-            val b = rgb[i * 3 + 2].toInt() and 0xFF
-            argb[i] = (0xFF shl 24) or (r shl 16) or (g shl 8) or b
-        }
-        return Bitmap.createBitmap(argb, width, height, Bitmap.Config.ARGB_8888)
-    }
-
-    private fun readToken(input: DataInputStream): String {
-        val sb = StringBuilder()
-        var c = input.read()
-        while (c != -1 && Character.isWhitespace(c)) c = input.read()
-        while (c != -1 && !Character.isWhitespace(c)) {
-            sb.append(c.toChar())
-            c = input.read()
-        }
-        return sb.toString()
     }
 
     private fun iou(a: Box, b: BoundingBox): Float {

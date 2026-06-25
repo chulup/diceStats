@@ -117,6 +117,31 @@
     {
       "picture_name": "8.jpg",
       "dice": []
+    },
+    {
+      "picture_name": "9.jpg",
+      "dice": [
+        {
+          "boundingBox": {
+            "left": 0.3839,
+            "top": 0.3906,
+            "right": 0.4254,
+            "bottom": 0.4268
+          },
+          "value": 4,
+          "color": "yellow"
+        },
+        {
+          "boundingBox": {
+            "left": 0.5914,
+            "top": 0.5752,
+            "right": 0.6407,
+            "bottom": 0.6094
+          },
+          "value": 2,
+          "color": "red"
+        }
+      ]
     }
   ]
 }

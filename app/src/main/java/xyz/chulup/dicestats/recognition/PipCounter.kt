@@ -6,6 +6,7 @@ import org.opencv.core.KeyPoint
 import org.opencv.core.Mat
 import org.opencv.core.MatOfKeyPoint
 import org.opencv.core.Rect
+import org.opencv.core.Size
 import org.opencv.features2d.SimpleBlobDetector
 import org.opencv.features2d.SimpleBlobDetector_Params
 import org.opencv.imgproc.Imgproc
@@ -39,14 +40,22 @@ class PipCounter {
         val rect = Rect(left, top, right - left, bottom - top)
 
         val crop = Mat(rgba, rect)
-        val gray = Mat()
-        Imgproc.cvtColor(crop, gray, Imgproc.COLOR_RGBA2GRAY)
+        // Normalize the crop to a canonical size so pips are a consistent scale
+        // regardless of how near/far the die was — fixed blob-area params then work
+        // for both close-up and far-away dice.
+        val canonical = Mat()
+        val scale = CANONICAL_EDGE / maxOf(rect.width, rect.height).toDouble()
+        Imgproc.resize(crop, canonical, Size(), scale, scale, Imgproc.INTER_CUBIC)
 
-        val cropArea = (rect.width * rect.height).toDouble()
+        val gray = Mat()
+        Imgproc.cvtColor(canonical, gray, Imgproc.COLOR_RGBA2GRAY)
+
+        val cropArea = (canonical.rows() * canonical.cols()).toDouble()
         val count = countBlobs(gray, cropArea)
 
         rgba.release()
         crop.release()
+        canonical.release()
         gray.release()
 
         return if (count in MIN_PIPS..MAX_PIPS) count else null
@@ -91,6 +100,7 @@ class PipCounter {
     private companion object {
         const val MIN_PIPS = 1
         const val MAX_PIPS = 6
+        const val CANONICAL_EDGE = 256.0
         const val DARK = 0
         const val LIGHT = 255
         const val MIN_PIP_AREA_FRACTION = 0.004
