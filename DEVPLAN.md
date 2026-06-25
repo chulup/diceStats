@@ -26,21 +26,25 @@ and list captured photos.
 
 **Goal:** Find each d6 in a captured photo.
 
-- [ ] `:recognition` interface: `DieDetector.detect(image) → List<BoundingBox>`.
-- [ ] Detect dice (model or classical CV segmentation — decide via spike).
-- [ ] Overlay detected bounding boxes on the photo for visual confirmation.
+- [x] `:recognition` interface: `DieDetector.detect(image) → List<BoundingBox>`.
+- [x] Detect dice — spike chose classical CV (HSV saturation/value segmentation, in
+      pure Kotlin so it stays JVM-unit-testable).
+- [x] Overlay detected bounding boxes on the photo for visual confirmation.
 
-**Done when:** the app draws a box around each die in a captured photo.
+**Done when:** the app draws a box around each die in a captured photo. ✓
 
 ## Step 3 — Pip counting
 
 **Goal:** Read the value of each detected die.
 
-- [ ] OpenCV pip/blob counting on each die crop → value 1–6.
-- [ ] Produce `DetectedDie(value, valueConfidence, boundingBox)` per die.
-- [ ] Show the recognized value next to each box; flag low confidence.
+- [x] OpenCV pip/blob counting on each die crop → value 1–6 (`PipCounter`,
+      SimpleBlobDetector, both polarities).
+- [x] Produce `DetectedDie(value, boundingBox)` per die (`DieRecognizer`).
+      Confidence is currently binary — value is `null` when pips are unreadable;
+      a numeric `valueConfidence` 0..1 is deferred.
+- [x] Show the recognized value next to each box; unreadable faces flagged amber "?".
 
-**Done when:** each detected die shows a 1–6 value with a confidence score.
+**Done when:** each detected die shows a 1–6 value. ✓ (numeric confidence deferred)
 
 ## Step 4 — Die database & store rolls
 
