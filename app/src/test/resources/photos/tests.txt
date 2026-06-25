@@ -1,0 +1,122 @@
+{
+  "tests": [
+    {
+      "picture_name": "1.jpg",
+      "dice": [
+        {
+          "boundingBox": {
+            "left": 0.3035,
+            "top": 0.4053,
+            "right": 0.4384,
+            "bottom": 0.5176
+          },
+          "value": 3,
+          "color": "red"
+        }
+      ]
+    },
+    {
+      "picture_name": "2.jpg",
+      "dice": [
+        {
+          "boundingBox": {
+            "left": 0.3658,
+            "top": 0.3438,
+            "right": 0.5629,
+            "bottom": 0.4941
+          },
+          "value": 2,
+          "color": "red"
+        }
+      ]
+    },
+    {
+      "picture_name": "3.jpg",
+      "dice": [
+        {
+          "boundingBox": {
+            "left": 0.4371,
+            "top": 0.4238,
+            "right": 0.5875,
+            "bottom": 0.5469
+          },
+          "value": 1,
+          "color": "yellow"
+        }
+      ]
+    },
+    {
+      "picture_name": "4.jpg",
+      "dice": [
+        {
+          "boundingBox": {
+            "left": 0.4436,
+            "top": 0.5049,
+            "right": 0.6213,
+            "bottom": 0.6357
+          },
+          "value": 5,
+          "color": "yellow"
+        }
+      ]
+    },
+    {
+      "picture_name": "5.jpg",
+      "dice": [
+        {
+          "boundingBox": {
+            "left": 0.3606,
+            "top": 0.5273,
+            "right": 0.5136,
+            "bottom": 0.6455
+          },
+          "value": 3,
+          "color": "yellow"
+        },
+        {
+          "boundingBox": {
+            "left": 0.5006,
+            "top": 0.3633,
+            "right": 0.6394,
+            "bottom": 0.4736
+          },
+          "value": 4,
+          "color": "red"
+        }
+      ]
+    },
+    {
+      "picture_name": "6.jpg",
+      "dice": [
+        {
+          "boundingBox": {
+            "left": 0.5331,
+            "top": 0.3906,
+            "right": 0.7263,
+            "bottom": 0.5449
+          },
+          "value": 2,
+          "color": "yellow"
+        },
+        {
+          "boundingBox": {
+            "left": 0.3567,
+            "top": 0.4619,
+            "right": 0.5655,
+            "bottom": 0.624
+          },
+          "value": 5,
+          "color": "red"
+        }
+      ]
+    },
+    {
+      "picture_name": "7.jpg",
+      "dice": []
+    },
+    {
+      "picture_name": "8.jpg",
+      "dice": []
+    }
+  ]
+}

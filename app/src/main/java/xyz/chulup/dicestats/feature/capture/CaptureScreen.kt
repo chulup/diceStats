@@ -1,4 +1,4 @@
-package com.dicestats.app.feature.capture
+package xyz.chulup.dicestats.feature.capture
 
 import android.Manifest
 import android.content.Context
@@ -37,7 +37,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import com.dicestats.app.data.photo.PhotoStorage
+import xyz.chulup.dicestats.data.photo.PhotoStorage
 
 private const val TAG = "CaptureScreen"
 

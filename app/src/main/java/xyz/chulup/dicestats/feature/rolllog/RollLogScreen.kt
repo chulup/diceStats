@@ -1,5 +1,6 @@
-package com.dicestats.app.feature.rolllog
+package xyz.chulup.dicestats.feature.rolllog
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
@@ -32,12 +33,12 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import coil.compose.AsyncImage
-import com.dicestats.app.data.photo.PhotoStorage
+import xyz.chulup.dicestats.data.photo.PhotoStorage
 import java.io.File
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun RollLogScreen(onCapture: () -> Unit) {
+fun RollLogScreen(onCapture: () -> Unit, onPhotoClick: (String) -> Unit) {
     val context = LocalContext.current
     val storage = remember { PhotoStorage(context) }
     var photos by remember { mutableStateOf<List<File>>(emptyList()) }
@@ -87,7 +88,8 @@ fun RollLogScreen(onCapture: () -> Unit) {
                         contentDescription = "Roll photo",
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(120.dp),
+                            .height(120.dp)
+                            .clickable { onPhotoClick(file.absolutePath) },
                     )
                 }
             }

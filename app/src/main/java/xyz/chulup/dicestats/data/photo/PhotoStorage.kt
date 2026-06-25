@@ -1,4 +1,4 @@
-package com.dicestats.app.data.photo
+package xyz.chulup.dicestats.data.photo
 
 import android.content.Context
 import java.io.File

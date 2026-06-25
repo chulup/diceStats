@@ -1,4 +1,4 @@
-package com.dicestats.app.ui.theme
+package xyz.chulup.dicestats.ui.theme
 
 import androidx.compose.ui.graphics.Color
 

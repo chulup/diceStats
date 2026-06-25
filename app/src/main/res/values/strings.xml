@@ -1,3 +1,12 @@
 <resources>
     <string name="app_name">DiceStats</string>
+    <string name="back">Back</string>
+    <string name="detection_title">Detected dice</string>
+    <string name="detection_photo_desc">Captured roll with detected dice</string>
+    <string name="detection_error">Detection failed: %1$s</string>
+    <plurals name="detection_count">
+        <item quantity="zero">No dice detected</item>
+        <item quantity="one">%1$d die detected</item>
+        <item quantity="other">%1$d dice detected</item>
+    </plurals>
 </resources>

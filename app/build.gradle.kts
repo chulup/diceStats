@@ -5,11 +5,11 @@ plugins {
 }
 
 android {
-    namespace = "com.dicestats.app"
+    namespace = "xyz.chulup.dicestats"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.dicestats.app"
+        applicationId = "xyz.chulup.dicestats"
         minSdk = 26
         targetSdk = 35
         versionCode = 1
@@ -62,6 +62,11 @@ dependencies {
     implementation(libs.androidx.camera.view)
 
     implementation(libs.coil.compose)
+
+    implementation(libs.kotlinx.coroutines.android)
+
+    testImplementation(libs.junit)
+    testImplementation(libs.gson)
 
     debugImplementation(libs.androidx.ui.tooling)
 }

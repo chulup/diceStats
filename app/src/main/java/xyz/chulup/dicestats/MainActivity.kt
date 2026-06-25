@@ -1,11 +1,11 @@
-package com.dicestats.app
+package xyz.chulup.dicestats
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import com.dicestats.app.ui.navigation.DiceStatsNavHost
-import com.dicestats.app.ui.theme.DiceStatsTheme
+import xyz.chulup.dicestats.ui.navigation.DiceStatsNavHost
+import xyz.chulup.dicestats.ui.theme.DiceStatsTheme
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
