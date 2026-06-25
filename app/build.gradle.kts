@@ -41,6 +41,17 @@ android {
         compose = true
     }
     buildToolsVersion = "36.1.0"
+
+    // OpenCV bundles native libs for every ABI, so a single APK is ~160 MB. Split
+    // per ABI so each APK only carries the libs it needs (~40 MB).
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            include("arm64-v8a", "armeabi-v7a", "x86", "x86_64")
+            isUniversalApk = false
+        }
+    }
 }
 
 dependencies {
