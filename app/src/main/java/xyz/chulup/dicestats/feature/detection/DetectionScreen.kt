@@ -29,8 +29,9 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -38,8 +39,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import xyz.chulup.dicestats.R
-import xyz.chulup.dicestats.recognition.BoundingBox
+import xyz.chulup.dicestats.recognition.DetectedDie
 import java.io.File
+import android.graphics.Color as AndroidColor
+import android.graphics.Paint as AndroidPaint
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -98,7 +101,7 @@ fun DetectionScreen(
                 is DetectionUiState.Ready -> DetectionResult(
                     photoPath = photoPath,
                     aspectRatio = state.aspectRatio,
-                    boxes = state.boxes,
+                    dice = state.dice,
                 )
             }
         }
@@ -109,9 +112,8 @@ fun DetectionScreen(
 private fun DetectionResult(
     photoPath: String,
     aspectRatio: Float,
-    boxes: List<BoundingBox>,
+    dice: List<DetectedDie>,
 ) {
-    val context = LocalContext.current
     Box(contentAlignment = Alignment.TopStart) {
         // The container matches the photo's aspect ratio, so FillBounds shows the
         // image undistorted and normalized boxes map directly onto the canvas.
@@ -127,14 +129,14 @@ private fun DetectionResult(
                 contentScale = ContentScale.FillBounds,
                 modifier = Modifier.fillMaxSize(),
             )
-            BoxOverlay(boxes = boxes, modifier = Modifier.fillMaxSize())
+            DiceOverlay(dice = dice, modifier = Modifier.fillMaxSize())
         }
 
         Text(
             text = pluralStringResource(
                 R.plurals.detection_count,
-                boxes.size,
-                boxes.size,
+                dice.size,
+                dice.size,
             ),
             color = Color.White,
             modifier = Modifier
@@ -146,18 +148,40 @@ private fun DetectionResult(
 }
 
 @Composable
-private fun BoxOverlay(boxes: List<BoundingBox>, modifier: Modifier = Modifier) {
+private fun DiceOverlay(dice: List<DetectedDie>, modifier: Modifier = Modifier) {
+    val density = LocalDensity.current
     Canvas(modifier = modifier) {
         val strokeWidth = 3.dp.toPx()
-        boxes.forEach { box ->
+        val minLabel = with(density) { 16.dp.toPx() }
+        dice.forEach { die ->
+            val box = die.boundingBox
             val left = box.left * size.width
             val top = box.top * size.height
+            val w = box.width * size.width
+            val h = box.height * size.height
+            // Green when the value was read; amber to flag an unreadable face.
+            val color = if (die.value != null) Color(0xFF00E676) else Color(0xFFFFC107)
+
             drawRect(
-                color = Color(0xFF00E676),
+                color = color,
                 topLeft = Offset(left, top),
-                size = Size(box.width * size.width, box.height * size.height),
+                size = Size(w, h),
                 style = Stroke(width = strokeWidth),
             )
+
+            val label = die.value?.toString() ?: "?"
+            val textSize = (h * 0.45f).coerceAtLeast(minLabel)
+            val paint = AndroidPaint().apply {
+                this.color = AndroidColor.BLACK
+                this.textSize = textSize
+                isFakeBoldText = true
+                isAntiAlias = true
+            }
+            val pad = textSize * 0.2f
+            val chipW = paint.measureText(label) + pad * 2
+            val chipH = textSize + pad * 2
+            drawRect(color = color, topLeft = Offset(left, top), size = Size(chipW, chipH))
+            drawContext.canvas.nativeCanvas.drawText(label, left + pad, top + textSize + pad * 0.6f, paint)
         }
     }
 }

@@ -10,9 +10,8 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
-import xyz.chulup.dicestats.recognition.BoundingBox
-import xyz.chulup.dicestats.recognition.ClassicalDieDetector
-import xyz.chulup.dicestats.recognition.DieDetector
+import xyz.chulup.dicestats.recognition.DetectedDie
+import xyz.chulup.dicestats.recognition.DieRecognizer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -30,7 +29,7 @@ sealed interface DetectionUiState {
      */
     data class Ready(
         val aspectRatio: Float,
-        val boxes: List<BoundingBox>,
+        val dice: List<DetectedDie>,
     ) : DetectionUiState
 
     data class Error(val message: String) : DetectionUiState
@@ -43,7 +42,7 @@ sealed interface DetectionUiState {
 class DetectionViewModel(
     application: Application,
     private val photoPath: String,
-    private val detector: DieDetector = ClassicalDieDetector(),
+    private val recognizer: DieRecognizer = DieRecognizer(),
 ) : AndroidViewModel(application) {
 
     private val _uiState = MutableStateFlow<DetectionUiState>(DetectionUiState.Loading)
@@ -66,10 +65,10 @@ class DetectionViewModel(
             val result = runCatching {
                 val bitmap = withContext(Dispatchers.Default) { decodeOriented(photoPath) }
                     ?: error("Could not decode photo")
-                val boxes = detector.detect(bitmap)
+                val dice = recognizer.recognize(bitmap)
                 val ratio = bitmap.width.toFloat() / bitmap.height.toFloat()
                 bitmap.recycle()
-                DetectionUiState.Ready(aspectRatio = ratio, boxes = boxes)
+                DetectionUiState.Ready(aspectRatio = ratio, dice = dice)
             }
             _uiState.value = result.getOrElse {
                 DetectionUiState.Error(it.message ?: "Detection failed")

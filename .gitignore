@@ -68,3 +68,6 @@ google-services.json
 # Python (local tooling used to prototype/validate detection)
 .venv/
 __pycache__/
+
+# Local prototyping scratch output
+scratch_*/
