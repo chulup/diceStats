@@ -50,14 +50,14 @@ and list captured photos.
 
 **Goal:** Persist recognized rolls with user confirmation.
 
-- [ ] Room DB: `Die`, `Roll`, `DieResult` (nullable forward FKs per DESIGN.md).
-- [ ] Wire Hilt for DI.
-- [ ] Confirm screen: per detected die, edit value + assign to a `Die`
+- [x] Room DB: `Die`, `Roll`, `DieResult` (nullable forward FKs per DESIGN.md).
+- [x] Wire Hilt for DI.
+- [x] Confirm screen: per detected die, edit value + assign to a `Die`
       (pick from list / register new).
-- [ ] Persist `Roll` + `DieResult`s; roll log reads from DB.
+- [x] Persist `Roll` + `DieResult`s; roll log reads from DB.
 
 **Done when:** a confirmed capture is saved to the DB and survives restart, with
-each die assigned and its value recorded.
+each die assigned and its value recorded. ✓
 
 ---
 

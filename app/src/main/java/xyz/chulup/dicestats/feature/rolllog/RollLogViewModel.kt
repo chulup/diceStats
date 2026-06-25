@@ -1,64 +1,55 @@
 package xyz.chulup.dicestats.feature.rolllog
 
-import android.app.Application
-import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import xyz.chulup.dicestats.data.photo.PhotoStorage
-import kotlinx.coroutines.Dispatchers
+import dagger.hilt.android.lifecycle.HiltViewModel
+import xyz.chulup.dicestats.data.DiceRepository
+import xyz.chulup.dicestats.data.db.RollWithResults
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import java.io.File
+import javax.inject.Inject
 
 /**
- * @param selectedPaths absolute paths of photos currently selected for a bulk action.
- *   A non-empty set puts the screen in selection mode.
+ * @param selectedIds ids of rolls selected for a bulk action; non-empty = selection mode.
  */
 data class RollLogUiState(
-    val photos: List<File> = emptyList(),
-    val selectedPaths: Set<String> = emptySet(),
+    val rolls: List<RollWithResults> = emptyList(),
+    val selectedIds: Set<Long> = emptySet(),
 ) {
-    val inSelectionMode: Boolean get() = selectedPaths.isNotEmpty()
+    val inSelectionMode: Boolean get() = selectedIds.isNotEmpty()
 }
 
-class RollLogViewModel(application: Application) : AndroidViewModel(application) {
+@HiltViewModel
+class RollLogViewModel @Inject constructor(
+    private val repository: DiceRepository,
+) : ViewModel() {
 
-    private val storage = PhotoStorage(application)
+    private val selectedIds = MutableStateFlow<Set<Long>>(emptySet())
 
-    private val _uiState = MutableStateFlow(RollLogUiState())
-    val uiState: StateFlow<RollLogUiState> = _uiState.asStateFlow()
+    val uiState: StateFlow<RollLogUiState> =
+        combine(repository.rolls, selectedIds) { rolls, selected ->
+            // Drop selection of rolls that no longer exist.
+            val existing = rolls.mapTo(HashSet()) { it.roll.id }
+            RollLogUiState(rolls = rolls, selectedIds = selected intersect existing)
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), RollLogUiState())
 
-    /** Reloads the photo list, dropping any selection of files that no longer exist. */
-    fun refresh() {
-        viewModelScope.launch {
-            val photos = withContext(Dispatchers.IO) { storage.listPhotos() }
-            val existing = photos.mapTo(HashSet()) { it.absolutePath }
-            _uiState.update { it.copy(photos = photos, selectedPaths = it.selectedPaths intersect existing) }
-        }
-    }
-
-    fun toggleSelection(path: String) {
-        _uiState.update { state ->
-            val selected = state.selectedPaths.toMutableSet()
-            if (!selected.add(path)) selected.remove(path)
-            state.copy(selectedPaths = selected)
-        }
+    fun toggleSelection(id: Long) {
+        selectedIds.update { if (id in it) it - id else it + id }
     }
 
     fun clearSelection() {
-        _uiState.update { it.copy(selectedPaths = emptySet()) }
+        selectedIds.value = emptySet()
     }
 
     fun deleteSelected() {
-        val toDelete = _uiState.value.selectedPaths
-        if (toDelete.isEmpty()) return
-        viewModelScope.launch {
-            withContext(Dispatchers.IO) { storage.deletePhotos(toDelete) }
-            val photos = withContext(Dispatchers.IO) { storage.listPhotos() }
-            _uiState.update { it.copy(photos = photos, selectedPaths = emptySet()) }
-        }
+        val ids = selectedIds.value.toList()
+        if (ids.isEmpty()) return
+        selectedIds.value = emptySet()
+        viewModelScope.launch { repository.deleteRolls(ids) }
     }
 }

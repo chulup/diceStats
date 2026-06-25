@@ -31,7 +31,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -43,43 +42,29 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import xyz.chulup.dicestats.R
-import androidx.compose.foundation.shape.RoundedCornerShape
+import xyz.chulup.dicestats.data.db.RollWithResults
 import java.io.File
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun RollLogScreen(
     onCapture: () -> Unit,
-    onPhotoClick: (String) -> Unit,
-    viewModel: RollLogViewModel = viewModel(),
+    viewModel: RollLogViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var showDeleteDialog by remember { mutableStateOf(false) }
 
-    // Refresh the list whenever the screen resumes (e.g. returning from capture).
-    val lifecycleOwner = LocalLifecycleOwner.current
-    DisposableEffect(lifecycleOwner) {
-        val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) viewModel.refresh()
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
-    }
-
-    // While selecting, system back clears the selection rather than leaving the screen.
     BackHandler(enabled = uiState.inSelectionMode) { viewModel.clearSelection() }
 
     Scaffold(
         topBar = {
             if (uiState.inSelectionMode) {
-                val count = uiState.selectedPaths.size
+                val count = uiState.selectedIds.size
                 TopAppBar(
                     title = { Text(pluralStringResource(R.plurals.selection_count, count, count)) },
                     navigationIcon = {
@@ -107,7 +92,7 @@ fun RollLogScreen(
             }
         },
     ) { padding ->
-        if (uiState.photos.isEmpty()) {
+        if (uiState.rolls.isEmpty()) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -126,16 +111,13 @@ fun RollLogScreen(
                     .fillMaxSize()
                     .padding(padding),
             ) {
-                items(uiState.photos, key = { it.absolutePath }) { file ->
-                    val path = file.absolutePath
-                    val selected = path in uiState.selectedPaths
-                    PhotoCell(
-                        file = file,
+                items(uiState.rolls, key = { it.roll.id }) { roll ->
+                    val selected = roll.roll.id in uiState.selectedIds
+                    RollCell(
+                        roll = roll,
                         selected = selected,
-                        onClick = {
-                            if (uiState.inSelectionMode) viewModel.toggleSelection(path) else onPhotoClick(path)
-                        },
-                        onLongClick = { viewModel.toggleSelection(path) },
+                        onClick = { if (uiState.inSelectionMode) viewModel.toggleSelection(roll.roll.id) },
+                        onLongClick = { viewModel.toggleSelection(roll.roll.id) },
                     )
                 }
             }
@@ -143,7 +125,7 @@ fun RollLogScreen(
     }
 
     if (showDeleteDialog) {
-        val count = uiState.selectedPaths.size
+        val count = uiState.selectedIds.size
         AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
             title = { Text(stringResource(R.string.delete_dialog_title)) },
@@ -165,8 +147,8 @@ fun RollLogScreen(
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun PhotoCell(
-    file: File,
+private fun RollCell(
+    roll: RollWithResults,
     selected: Boolean,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
@@ -180,10 +162,25 @@ private fun PhotoCell(
             .combinedClickable(onClick = onClick, onLongClick = onLongClick),
     ) {
         AsyncImage(
-            model = file,
+            model = File(roll.roll.photoPath),
             contentDescription = stringResource(R.string.roll_photo_desc),
             modifier = Modifier.fillMaxSize(),
         )
+
+        // Summary of recognized values, e.g. "3, 4".
+        val summary = roll.results.joinToString(", ") { it.value.toString() }
+        if (summary.isNotEmpty()) {
+            Text(
+                text = summary,
+                color = Color.White,
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .fillMaxWidth()
+                    .background(Color(0xAA000000))
+                    .padding(horizontal = 6.dp, vertical = 2.dp),
+            )
+        }
+
         if (selected) {
             Box(
                 modifier = Modifier

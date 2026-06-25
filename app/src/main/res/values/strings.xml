@@ -21,6 +21,17 @@
     <string name="detection_title">Detected dice</string>
     <string name="detection_photo_desc">Captured roll with detected dice</string>
     <string name="detection_retake">Retake photo</string>
+    <string name="confirm_title">Confirm roll</string>
+    <string name="confirm_save">Save</string>
+    <string name="confirm_die_number">Die %1$d</string>
+    <string name="confirm_decrement">Decrease value</string>
+    <string name="confirm_increment">Increase value</string>
+    <string name="confirm_choose_die">Choose die</string>
+    <string name="confirm_die_label">Assign to die</string>
+    <string name="confirm_register_new">Register new die…</string>
+    <string name="confirm_register_title">Register die</string>
+    <string name="confirm_die_name">Die name</string>
+    <string name="confirm_register_action">Register</string>
     <string name="detection_error">Detection failed: %1$s</string>
     <plurals name="detection_count">
         <item quantity="zero">No dice detected</item>

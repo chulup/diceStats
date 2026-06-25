@@ -1,27 +1,46 @@
 package xyz.chulup.dicestats.feature.detection
 
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MenuAnchorType
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
@@ -35,11 +54,11 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import xyz.chulup.dicestats.R
-import xyz.chulup.dicestats.recognition.DetectedDie
+import xyz.chulup.dicestats.data.db.DieEntity
 import java.io.File
 import android.graphics.Color as AndroidColor
 import android.graphics.Paint as AndroidPaint
@@ -50,16 +69,25 @@ fun DetectionScreen(
     photoPath: String,
     onBack: () -> Unit,
     onRetake: () -> Unit,
-    viewModel: DetectionViewModel = viewModel(factory = DetectionViewModel.factory(photoPath)),
+    onSaved: () -> Unit,
+    viewModel: DetectionViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+
+    val ready = uiState as? DetectionUiState.Ready
+    LaunchedEffect(ready?.saved) {
+        if (ready?.saved == true) onSaved()
+    }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(R.string.detection_title)) },
+                title = { Text(stringResource(R.string.confirm_title)) },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
+                    IconButton(onClick = {
+                        viewModel.discardPhoto()
+                        onBack()
+                    }) {
                         Icon(
                             Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = stringResource(R.string.back),
@@ -69,18 +97,30 @@ fun DetectionScreen(
             )
         },
         bottomBar = {
-            Button(
-                onClick = {
-                    viewModel.discardPhoto()
-                    onRetake()
-                },
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(16.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Icon(Icons.Default.Refresh, contentDescription = null)
-                Spacer(Modifier.width(8.dp))
-                Text(stringResource(R.string.detection_retake))
+                OutlinedButton(
+                    onClick = {
+                        viewModel.discardPhoto()
+                        onRetake()
+                    },
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Icon(Icons.Default.Refresh, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text(stringResource(R.string.detection_retake))
+                }
+                Button(
+                    onClick = viewModel::save,
+                    enabled = ready?.canSave == true && !ready.saving,
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text(stringResource(R.string.confirm_save))
+                }
             }
         },
     ) { padding ->
@@ -98,10 +138,12 @@ fun DetectionScreen(
                     modifier = Modifier.padding(16.dp),
                 )
 
-                is DetectionUiState.Ready -> DetectionResult(
+                is DetectionUiState.Ready -> ConfirmContent(
                     photoPath = photoPath,
-                    aspectRatio = state.aspectRatio,
-                    dice = state.dice,
+                    state = state,
+                    onValueChange = viewModel::setValue,
+                    onAssign = viewModel::assignDie,
+                    onRegister = viewModel::registerAndAssign,
                 )
             }
         }
@@ -109,18 +151,22 @@ fun DetectionScreen(
 }
 
 @Composable
-private fun DetectionResult(
+private fun ConfirmContent(
     photoPath: String,
-    aspectRatio: Float,
-    dice: List<DetectedDie>,
+    state: DetectionUiState.Ready,
+    onValueChange: (Int, Int) -> Unit,
+    onAssign: (Int, Long) -> Unit,
+    onRegister: (Int, String) -> Unit,
 ) {
-    Box(contentAlignment = Alignment.TopStart) {
-        // The container matches the photo's aspect ratio, so FillBounds shows the
-        // image undistorted and normalized boxes map directly onto the canvas.
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState()),
+    ) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .aspectRatio(aspectRatio)
+                .aspectRatio(state.aspectRatio)
                 .clipToBounds(),
         ) {
             AsyncImage(
@@ -129,38 +175,152 @@ private fun DetectionResult(
                 contentScale = ContentScale.FillBounds,
                 modifier = Modifier.fillMaxSize(),
             )
-            DiceOverlay(dice = dice, modifier = Modifier.fillMaxSize())
+            DiceOverlay(dice = state.dice, modifier = Modifier.fillMaxSize())
         }
 
         Text(
-            text = pluralStringResource(
-                R.plurals.detection_count,
-                dice.size,
-                dice.size,
-            ),
-            color = Color.White,
-            modifier = Modifier
-                .padding(12.dp)
-                .background(Color(0xAA000000))
-                .padding(horizontal = 8.dp, vertical = 4.dp),
+            text = pluralStringResource(R.plurals.detection_count, state.dice.size, state.dice.size),
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+        )
+
+        state.dice.forEachIndexed { index, die ->
+            DieRow(
+                index = index,
+                die = die,
+                registeredDice = state.registeredDice,
+                onValueChange = { onValueChange(index, it) },
+                onAssign = { onAssign(index, it) },
+                onRegister = { onRegister(index, it) },
+            )
+        }
+
+        if (state.saving) {
+            Box(modifier = Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator()
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun DieRow(
+    index: Int,
+    die: DieAssignment,
+    registeredDice: List<DieEntity>,
+    onValueChange: (Int) -> Unit,
+    onAssign: (Long) -> Unit,
+    onRegister: (String) -> Unit,
+) {
+    var showRegisterDialog by remember { mutableStateOf(false) }
+    var dropdownExpanded by remember { mutableStateOf(false) }
+
+    Card(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = stringResource(R.string.confirm_die_number, index + 1),
+                    modifier = Modifier.weight(1f),
+                )
+                IconButton(onClick = { onValueChange(die.value - 1) }) {
+                    Icon(Icons.Default.Remove, contentDescription = stringResource(R.string.confirm_decrement))
+                }
+                Text(text = die.value.toString())
+                IconButton(onClick = { onValueChange(die.value + 1) }) {
+                    Icon(Icons.Default.Add, contentDescription = stringResource(R.string.confirm_increment))
+                }
+            }
+
+            val selectedName = registeredDice.firstOrNull { it.id == die.dieId }?.name
+                ?: stringResource(R.string.confirm_choose_die)
+            ExposedDropdownMenuBox(
+                expanded = dropdownExpanded,
+                onExpandedChange = { dropdownExpanded = !dropdownExpanded },
+            ) {
+                OutlinedTextField(
+                    value = selectedName,
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text(stringResource(R.string.confirm_die_label)) },
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(dropdownExpanded) },
+                    modifier = Modifier
+                        .menuAnchor(MenuAnchorType.PrimaryNotEditable)
+                        .fillMaxWidth(),
+                )
+                ExposedDropdownMenu(
+                    expanded = dropdownExpanded,
+                    onDismissRequest = { dropdownExpanded = false },
+                ) {
+                    registeredDice.forEach { registered ->
+                        DropdownMenuItem(
+                            text = { Text(registered.name) },
+                            onClick = {
+                                onAssign(registered.id)
+                                dropdownExpanded = false
+                            },
+                        )
+                    }
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.confirm_register_new)) },
+                        onClick = {
+                            dropdownExpanded = false
+                            showRegisterDialog = true
+                        },
+                    )
+                }
+            }
+        }
+    }
+
+    if (showRegisterDialog) {
+        RegisterDieDialog(
+            onDismiss = { showRegisterDialog = false },
+            onConfirm = { name ->
+                showRegisterDialog = false
+                onRegister(name)
+            },
         )
     }
 }
 
 @Composable
-private fun DiceOverlay(dice: List<DetectedDie>, modifier: Modifier = Modifier) {
+private fun RegisterDieDialog(onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
+    var name by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.confirm_register_title)) },
+        text = {
+            OutlinedTextField(
+                value = name,
+                onValueChange = { name = it },
+                singleLine = true,
+                label = { Text(stringResource(R.string.confirm_die_name)) },
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(name) }, enabled = name.isNotBlank()) {
+                Text(stringResource(R.string.confirm_register_action))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.dialog_cancel)) }
+        },
+    )
+}
+
+@Composable
+private fun DiceOverlay(dice: List<DieAssignment>, modifier: Modifier = Modifier) {
     val density = LocalDensity.current
     Canvas(modifier = modifier) {
         val strokeWidth = 3.dp.toPx()
         val minLabel = with(density) { 16.dp.toPx() }
-        dice.forEach { die ->
+        dice.forEachIndexed { index, die ->
             val box = die.boundingBox
             val left = box.left * size.width
             val top = box.top * size.height
             val w = box.width * size.width
             val h = box.height * size.height
-            // Green when the value was read; amber to flag an unreadable face.
-            val color = if (die.value != null) Color(0xFF00E676) else Color(0xFFFFC107)
+            val color = Color(0xFF00E676)
 
             drawRect(
                 color = color,
@@ -169,8 +329,8 @@ private fun DiceOverlay(dice: List<DetectedDie>, modifier: Modifier = Modifier) 
                 style = Stroke(width = strokeWidth),
             )
 
-            val label = die.value?.toString() ?: "?"
-            val textSize = (h * 0.45f).coerceAtLeast(minLabel)
+            val label = "${index + 1}: ${die.value}"
+            val textSize = (h * 0.35f).coerceAtLeast(minLabel)
             val paint = AndroidPaint().apply {
                 this.color = AndroidColor.BLACK
                 this.textSize = textSize

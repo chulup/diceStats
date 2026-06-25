@@ -28,13 +28,12 @@ fun DiceStatsNavHost() {
         composable(Routes.ROLL_LOG) {
             RollLogScreen(
                 onCapture = { navController.navigate(Routes.CAPTURE) },
-                onPhotoClick = { path -> navController.navigate(Routes.detection(path)) },
             )
         }
         composable(Routes.CAPTURE) {
             CaptureScreen(
-                // Go straight to detection on the captured photo; drop capture from the
-                // back stack so "back" from detection returns to the roll log.
+                // Go straight to confirm/detection on the captured photo; drop capture
+                // from the back stack so "back" from confirm returns to the roll log.
                 onPhotoSaved = { path ->
                     navController.navigate(Routes.detection(path)) {
                         popUpTo(Routes.CAPTURE) { inclusive = true }
@@ -61,6 +60,7 @@ fun DiceStatsNavHost() {
                         popUpTo(Routes.DETECTION) { inclusive = true }
                     }
                 },
+                onSaved = { navController.popBackStack(Routes.ROLL_LOG, inclusive = false) },
             )
         }
     }
