@@ -31,6 +31,20 @@ Guidance for Claude Code when working in this Android project.
 
 Run a single test: `./gradlew test --tests "com.example.MyClassTest"`
 
+## Environment & Device Access
+
+This runs in WSL2; the Android SDK tools and ADB server live on the Windows host.
+
+- **Android SDK binaries** (`adb`, `aapt`, etc.) — add the SDK dirs to `PATH`:
+  ```bash
+  PATH="$HOME/Android/Sdk/build-tools/36.1.0/:$HOME/Android/Sdk/platform-tools:$PATH"
+  ```
+- **Physical device via remote ADB server** — point ADB at the host's server (the WSL default gateway):
+  ```bash
+  export ADB_SERVER_SOCKET=tcp:$(ip route show default | awk '{print $3}'):5037
+  ```
+  Then `adb devices` should list the connected device.
+
 ## Conventions
 
 - Keep `Composable`s small and stateless; hoist state to the `ViewModel`.

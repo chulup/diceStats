@@ -12,12 +12,12 @@ See [DESIGN.md](DESIGN.md) for the full architecture this works toward.
 **Goal:** Launch the app, take a photo, store it in a dedicated on-device directory,
 and list captured photos.
 
-- [ ] Project scaffold: Gradle (Kotlin DSL + version catalog), `:app` module, manifest.
-- [ ] Compose + Material3 theme, single-activity, Navigation.
-- [ ] `CAMERA` runtime permission handling.
-- [ ] Capture screen: CameraX preview + shutter → save JPEG.
-- [ ] `PhotoStorage`: writes to `getExternalFilesDir(null)/rolls`.
-- [ ] Roll log screen: list stored photos (newest first), FAB → capture.
+- [x] Project scaffold: Gradle (Kotlin DSL + version catalog), `:app` module, manifest.
+- [x] Compose + Material3 theme, single-activity, Navigation.
+- [x] `CAMERA` runtime permission handling.
+- [x] Capture screen: CameraX preview + shutter → save JPEG.
+- [x] `PhotoStorage`: writes to `getExternalFilesDir(null)/rolls`.
+- [x] Roll log screen: list stored photos (newest first), FAB → capture.
 
 **Done when:** a photo taken in-app appears in the roll log and persists in the
 `rolls/` directory across app restarts.
