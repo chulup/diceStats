@@ -45,6 +45,19 @@ This runs in WSL2; the Android SDK tools and ADB server live on the Windows host
   ```
   Then `adb devices` should list the connected device.
 
+- **Instrumented tests against the remote device** — `./gradlew connectedAndroidTest`
+  hangs in this setup: Gradle's DDMLIB only talks to `127.0.0.1:5037` and can't use
+  the remote ADB server ("Cannot reach ADB server"). Build the APKs and drive the
+  instrumentation through the `adb` CLI instead (it honors `ADB_SERVER_SOCKET`):
+  ```bash
+  ./gradlew assembleDebug assembleDebugAndroidTest
+  adb install -r app/build/outputs/apk/debug/app-arm64-v8a-debug.apk
+  adb install -r app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+  adb shell am instrument -w \
+    xyz.chulup.dicestats.test/androidx.test.runner.AndroidJUnitRunner
+  ```
+  (APK is split per ABI; pick the one matching `adb shell getprop ro.product.cpu.abi`.)
+
 ## Conventions
 
 - Keep `Composable`s small and stateless; hoist state to the `ViewModel`.
