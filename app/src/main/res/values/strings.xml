@@ -33,6 +33,8 @@
     <string name="confirm_die_name">Die name</string>
     <string name="confirm_register_action">Register</string>
     <string name="confirm_remove_die">Remove die</string>
+    <string name="palette_hint">Tap a die in the photo to label it the highlighted die; the highlight then advances.</string>
+    <string name="palette_new_die">New die</string>
     <string name="detection_error">Detection failed: %1$s</string>
     <plurals name="detection_count">
         <item quantity="zero">No dice detected</item>

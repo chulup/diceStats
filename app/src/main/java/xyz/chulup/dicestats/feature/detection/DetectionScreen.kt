@@ -3,9 +3,13 @@ package xyz.chulup.dicestats.feature.detection
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -18,6 +22,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -35,6 +40,7 @@ import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -154,6 +160,9 @@ fun DetectionScreen(
                     onAssign = viewModel::assignDie,
                     onRegister = viewModel::registerAndAssign,
                     onRemove = viewModel::removeDie,
+                    onIdentify = viewModel::identifyAsActive,
+                    onSelectActive = viewModel::selectActiveDie,
+                    onRegisterActive = viewModel::registerAndSetActive,
                 )
             }
         }
@@ -168,7 +177,13 @@ private fun ConfirmContent(
     onAssign: (Int, Long) -> Unit,
     onRegister: (Int, String) -> Unit,
     onRemove: (Int) -> Unit,
+    onIdentify: (Int) -> Unit,
+    onSelectActive: (Long) -> Unit,
+    onRegisterActive: (String) -> Unit,
 ) {
+    val nameFor: (Long?) -> String? = { id ->
+        id?.let { dieId -> state.registeredDice.firstOrNull { it.id == dieId }?.name }
+    }
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -186,12 +201,24 @@ private fun ConfirmContent(
                 contentScale = ContentScale.FillBounds,
                 modifier = Modifier.fillMaxSize(),
             )
-            DiceOverlay(dice = state.dice, modifier = Modifier.fillMaxSize())
+            DiceOverlay(dice = state.dice, nameFor = nameFor, modifier = Modifier.fillMaxSize())
+
+            val areaWidth = maxWidth
+            val areaHeight = maxHeight
+
+            // Tapping a die identifies it as the active palette die.
+            state.dice.forEachIndexed { index, die ->
+                val box = die.boundingBox
+                Box(
+                    modifier = Modifier
+                        .offset(x = areaWidth * box.left, y = areaHeight * box.top)
+                        .size(width = areaWidth * box.width, height = areaHeight * box.height)
+                        .clickable { onIdentify(index) },
+                )
+            }
 
             // A tappable remove badge just to the right of each box (kept clear of
             // the die so it doesn't hide it).
-            val areaWidth = maxWidth
-            val areaHeight = maxHeight
             state.dice.forEachIndexed { index, die ->
                 val box = die.boundingBox
                 val rawX = areaWidth * box.right + 4.dp
@@ -204,6 +231,14 @@ private fun ConfirmContent(
                 )
             }
         }
+
+        DicePalette(
+            recentDice = state.recentDice,
+            activeDieId = state.activeDieId,
+            onSelect = onSelectActive,
+            onRegister = onRegisterActive,
+            modifier = Modifier.fillMaxWidth(),
+        )
 
         Text(
             text = pluralStringResource(R.plurals.detection_count, state.dice.size, state.dice.size),
@@ -340,6 +375,78 @@ private fun RegisterDieDialog(onDismiss: () -> Unit, onConfirm: (String) -> Unit
     )
 }
 
+/**
+ * Recent registered dice as a horizontal carousel below the photo. The highlighted
+ * die is the one the next tapped box will be identified as; the strip scrolls to
+ * keep it in view as the selection advances. Tapping a chip makes it active, and
+ * "New die" registers one and makes it active.
+ */
+@Composable
+private fun DicePalette(
+    recentDice: List<DieEntity>,
+    activeDieId: Long?,
+    onSelect: (Long) -> Unit,
+    onRegister: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var showRegisterDialog by remember { mutableStateOf(false) }
+    val listState = rememberLazyListState()
+
+    // Slide the carousel so the active die stays visible as the highlight advances.
+    val activeIndex = recentDice.indexOfFirst { it.id == activeDieId }
+    LaunchedEffect(activeIndex) {
+        if (activeIndex >= 0) listState.animateScrollToItem(activeIndex)
+    }
+
+    Column(modifier = modifier.padding(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(
+            text = stringResource(R.string.palette_hint),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 16.dp),
+        )
+        LazyRow(
+            state = listState,
+            contentPadding = PaddingValues(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            items(recentDice, key = { it.id }) { die ->
+                val active = die.id == activeDieId
+                val container =
+                    if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
+                val content =
+                    if (active) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(container)
+                        .clickable { onSelect(die.id) }
+                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                ) {
+                    Text(text = die.name, color = content)
+                }
+            }
+            item {
+                OutlinedButton(onClick = { showRegisterDialog = true }) {
+                    Icon(Icons.Default.Add, contentDescription = null)
+                    Spacer(Modifier.width(4.dp))
+                    Text(stringResource(R.string.palette_new_die))
+                }
+            }
+        }
+    }
+
+    if (showRegisterDialog) {
+        RegisterDieDialog(
+            onDismiss = { showRegisterDialog = false },
+            onConfirm = { name ->
+                showRegisterDialog = false
+                onRegister(name)
+            },
+        )
+    }
+}
+
 private val BADGE_SIZE = 28.dp
 
 /** Outline/label colour for a die whose pip value was recognized. */
@@ -368,7 +475,11 @@ private fun RemoveBadge(onClick: () -> Unit, modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun DiceOverlay(dice: List<DieAssignment>, modifier: Modifier = Modifier) {
+private fun DiceOverlay(
+    dice: List<DieAssignment>,
+    nameFor: (Long?) -> String?,
+    modifier: Modifier = Modifier,
+) {
     val density = LocalDensity.current
     Canvas(modifier = modifier) {
         val strokeWidth = 3.dp.toPx()
@@ -390,8 +501,11 @@ private fun DiceOverlay(dice: List<DieAssignment>, modifier: Modifier = Modifier
                 style = Stroke(width = strokeWidth),
             )
 
-            // Value chip sits just above the box so it never hides the die.
-            val label = if (die.hasValue) "${index + 1}: ${die.value}" else "${index + 1}: ?"
+            // Chip above the box shows the assigned die name (or the index until
+            // identified), plus the value. Never overlaps the die itself.
+            val who = nameFor(die.dieId) ?: "${index + 1}"
+            val valueText = if (die.hasValue) die.value.toString() else "?"
+            val label = "$who: $valueText"
             val paint = AndroidPaint().apply {
                 this.color = AndroidColor.BLACK
                 this.textSize = labelSize

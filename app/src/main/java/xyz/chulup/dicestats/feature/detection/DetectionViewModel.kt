@@ -45,12 +45,18 @@ sealed interface DetectionUiState {
         val aspectRatio: Float,
         val dice: List<DieAssignment>,
         val registeredDice: List<DieEntity>,
+        /** Die that the next tapped box will be identified as ("next die from the list"). */
+        val activeDieId: Long? = null,
         val saving: Boolean = false,
         val saved: Boolean = false,
     ) : DetectionUiState {
         /** Every die must be assigned and have a valid value before saving (DESIGN.md). */
         val canSave: Boolean
             get() = dice.isNotEmpty() && dice.all { it.dieId != null && it.value in 1..6 }
+
+        /** Registered dice ordered most-recent-first — the tap-to-identify palette. */
+        val recentDice: List<DieEntity>
+            get() = registeredDice.sortedByDescending { it.createdAt }
     }
 
     data class Error(val message: String) : DetectionUiState
@@ -80,10 +86,15 @@ class DetectionViewModel @Inject constructor(
 
     init {
         recognize()
-        // Keep the die picker in sync as dice get registered.
+        // Keep the die picker in sync as dice get registered, defaulting the active
+        // (next-to-assign) die to the most recent one when none is chosen yet.
         viewModelScope.launch {
             registeredDice.collect { dice ->
-                _uiState.update { if (it is DetectionUiState.Ready) it.copy(registeredDice = dice) else it }
+                _uiState.update { state ->
+                    if (state !is DetectionUiState.Ready) return@update state
+                    val active = state.activeDieId ?: dice.maxByOrNull { it.createdAt }?.id
+                    state.copy(registeredDice = dice, activeDieId = active)
+                }
             }
         }
     }
@@ -108,7 +119,13 @@ class DetectionViewModel @Inject constructor(
             }
             _uiState.value = result.fold(
                 onSuccess = { (ratio, dice) ->
-                    DetectionUiState.Ready(ratio, dice, registeredDice.value)
+                    val registered = registeredDice.value
+                    DetectionUiState.Ready(
+                        aspectRatio = ratio,
+                        dice = dice,
+                        registeredDice = registered,
+                        activeDieId = registered.maxByOrNull { it.createdAt }?.id,
+                    )
                 },
                 onFailure = { DetectionUiState.Error(it.message ?: "Detection failed") },
             )
@@ -128,12 +145,51 @@ class DetectionViewModel @Inject constructor(
 
     fun assignDie(index: Int, dieId: Long) = updateDie(index) { it.copy(dieId = dieId) }
 
+    /** Picks which die the next tapped box will be identified as. */
+    fun selectActiveDie(dieId: Long) {
+        _uiState.update { if (it is DetectionUiState.Ready) it.copy(activeDieId = dieId) else it }
+    }
+
+    /**
+     * Identifies the tapped die as the active die from the palette, then advances
+     * the active selection to the next die in the recent list — so tapping boxes
+     * in order walks down the palette.
+     */
+    fun identifyAsActive(index: Int) {
+        _uiState.update { state ->
+            if (state !is DetectionUiState.Ready) return@update state
+            val active = state.activeDieId ?: return@update state
+            val assigned = state.dice.mapIndexed { i, die ->
+                if (i == index) die.copy(dieId = active) else die
+            }
+            val order = state.recentDice
+            val nextActive = when {
+                order.isEmpty() -> null
+                else -> {
+                    val cur = order.indexOfFirst { it.id == active }
+                    order[(cur + 1) % order.size].id
+                }
+            }
+            state.copy(dice = assigned, activeDieId = nextActive)
+        }
+    }
+
     fun registerAndAssign(index: Int, name: String) {
         val trimmed = name.trim()
         if (trimmed.isEmpty()) return
         viewModelScope.launch {
             val id = repository.registerDie(trimmed)
             updateDie(index) { it.copy(dieId = id) }
+        }
+    }
+
+    /** Registers a new die from the palette and makes it the active selection. */
+    fun registerAndSetActive(name: String) {
+        val trimmed = name.trim()
+        if (trimmed.isEmpty()) return
+        viewModelScope.launch {
+            val id = repository.registerDie(trimmed)
+            _uiState.update { if (it is DetectionUiState.Ready) it.copy(activeDieId = id) else it }
         }
     }
 
