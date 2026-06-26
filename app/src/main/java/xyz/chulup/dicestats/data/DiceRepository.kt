@@ -3,6 +3,7 @@ package xyz.chulup.dicestats.data
 import xyz.chulup.dicestats.data.db.DieDao
 import xyz.chulup.dicestats.data.db.DieEntity
 import xyz.chulup.dicestats.data.db.DieResultEntity
+import xyz.chulup.dicestats.data.db.DieRollCount
 import xyz.chulup.dicestats.data.db.RollDao
 import xyz.chulup.dicestats.data.db.RollEntity
 import xyz.chulup.dicestats.data.db.RollWithResults
@@ -29,6 +30,14 @@ class DiceRepository @Inject constructor(
 ) {
     val dice: Flow<List<DieEntity>> = dieDao.observeAll()
     val rolls: Flow<List<RollWithResults>> = rollDao.observeRollsWithResults()
+
+    /** Number of recorded results per die, keyed by die id. */
+    val rollCountsByDie: Flow<List<DieRollCount>> = dieDao.observeRollCounts()
+
+    fun die(dieId: Long): Flow<DieEntity?> = dieDao.observeById(dieId)
+
+    /** All recorded face values for a die (for statistics). */
+    fun valuesForDie(dieId: Long): Flow<List<Int>> = dieDao.observeValuesForDie(dieId)
 
     suspend fun registerDie(name: String): Long =
         dieDao.insert(DieEntity(name = name, createdAt = System.currentTimeMillis()))

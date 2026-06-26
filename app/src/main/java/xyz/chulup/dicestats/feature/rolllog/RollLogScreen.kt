@@ -17,6 +17,7 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddAPhoto
+import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
@@ -54,6 +55,7 @@ import java.io.File
 @Composable
 fun RollLogScreen(
     onCapture: () -> Unit,
+    onDiceStats: () -> Unit,
     viewModel: RollLogViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -79,7 +81,14 @@ fun RollLogScreen(
                     },
                 )
             } else {
-                TopAppBar(title = { Text(stringResource(R.string.app_name)) })
+                TopAppBar(
+                    title = { Text(stringResource(R.string.app_name)) },
+                    actions = {
+                        IconButton(onClick = onDiceStats) {
+                            Icon(Icons.Default.BarChart, contentDescription = stringResource(R.string.dice_list_title))
+                        }
+                    },
+                )
             }
         },
         floatingActionButton = {

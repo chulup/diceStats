@@ -39,4 +39,22 @@
         <item quantity="one">%1$d die detected</item>
         <item quantity="other">%1$d dice detected</item>
     </plurals>
+    <string name="dice_list_title">Dice</string>
+    <string name="dice_list_empty">No dice registered yet. Save a roll to register one.</string>
+    <plurals name="dice_list_roll_count">
+        <item quantity="zero">No rolls</item>
+        <item quantity="one">%1$d roll</item>
+        <item quantity="other">%1$d rolls</item>
+    </plurals>
+    <string name="die_stats_title">Die stats</string>
+    <string name="die_stats_empty">No rolls recorded for this die yet.</string>
+    <string name="die_stats_total">Rolls</string>
+    <string name="die_stats_mean">Mean</string>
+    <string name="die_stats_expected_mean">Expected</string>
+    <string name="die_stats_distribution">Face distribution</string>
+    <string name="die_stats_fair">Looks fair</string>
+    <string name="die_stats_biased">Possibly biased</string>
+    <string name="die_stats_insufficient">Not enough rolls to judge</string>
+    <string name="die_stats_chi_square">Chi-square: %1$s (df 5)</string>
+    <string name="die_stats_p_value">p-value: %1$s</string>
 </resources>

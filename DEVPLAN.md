@@ -59,7 +59,20 @@ and list captured photos.
 **Done when:** a confirmed capture is saved to the DB and survives restart, with
 each die assigned and its value recorded. ✓
 
+## Step 5 — Per-die statistics
+
+**Goal:** Surface the recorded data as per-die fairness stats.
+
+- [x] Dice list screen (registered dice + roll counts), reachable from the roll log.
+- [x] `DieStatistics` (pure Kotlin): 1–6 distribution, total, mean, chi-square +
+      p-value (regularized incomplete gamma), fairness verdict.
+- [x] Die stats screen: distribution bar chart, summary (rolls/mean/expected),
+      fairness card ("looks fair / possibly biased / not enough rolls").
+
+**Done when:** tapping a registered die shows its face distribution and a
+fairness indicator. ✓
+
 ---
 
-After step 4 the MVP is feature-complete (per-die stats build on this data). v2/v3
-features (Games, Die Groups, Players) follow per DESIGN.md.
+After step 5 the MVP is feature-complete. v2/v3 features (Games, Die Groups,
+Players) follow per DESIGN.md.
