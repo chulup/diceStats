@@ -32,6 +32,7 @@
     <string name="confirm_register_title">Register die</string>
     <string name="confirm_die_name">Die name</string>
     <string name="confirm_register_action">Register</string>
+    <string name="confirm_remove_die">Remove die</string>
     <string name="detection_error">Detection failed: %1$s</string>
     <plurals name="detection_count">
         <item quantity="zero">No dice detected</item>

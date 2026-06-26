@@ -113,6 +113,14 @@ class DetectionViewModel @Inject constructor(
     fun setValue(index: Int, value: Int) =
         updateDie(index) { it.copy(value = value.coerceIn(MIN_VALUE, MAX_VALUE)) }
 
+    /** Drops a detected die the user judges to be a false positive. */
+    fun removeDie(index: Int) {
+        _uiState.update { state ->
+            if (state !is DetectionUiState.Ready) return@update state
+            state.copy(dice = state.dice.filterIndexed { i, _ -> i != index })
+        }
+    }
+
     fun assignDie(index: Int, dieId: Long) = updateDie(index) { it.copy(dieId = dieId) }
 
     fun registerAndAssign(index: Int, name: String) {

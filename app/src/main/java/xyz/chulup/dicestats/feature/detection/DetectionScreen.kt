@@ -1,21 +1,28 @@
 package xyz.chulup.dicestats.feature.detection
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.AlertDialog
@@ -43,6 +50,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -54,6 +62,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
@@ -144,6 +153,7 @@ fun DetectionScreen(
                     onValueChange = viewModel::setValue,
                     onAssign = viewModel::assignDie,
                     onRegister = viewModel::registerAndAssign,
+                    onRemove = viewModel::removeDie,
                 )
             }
         }
@@ -157,13 +167,14 @@ private fun ConfirmContent(
     onValueChange: (Int, Int) -> Unit,
     onAssign: (Int, Long) -> Unit,
     onRegister: (Int, String) -> Unit,
+    onRemove: (Int) -> Unit,
 ) {
     Column(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState()),
     ) {
-        Box(
+        BoxWithConstraints(
             modifier = Modifier
                 .fillMaxWidth()
                 .aspectRatio(state.aspectRatio)
@@ -176,6 +187,22 @@ private fun ConfirmContent(
                 modifier = Modifier.fillMaxSize(),
             )
             DiceOverlay(dice = state.dice, modifier = Modifier.fillMaxSize())
+
+            // A tappable remove badge just to the right of each box (kept clear of
+            // the die so it doesn't hide it).
+            val areaWidth = maxWidth
+            val areaHeight = maxHeight
+            state.dice.forEachIndexed { index, die ->
+                val box = die.boundingBox
+                val rawX = areaWidth * box.right + 4.dp
+                val badgeX = if (rawX > areaWidth - BADGE_SIZE) areaWidth - BADGE_SIZE else rawX
+                val rawY = areaHeight * ((box.top + box.bottom) / 2f) - BADGE_SIZE / 2
+                val badgeY = if (rawY < 0.dp) 0.dp else rawY
+                RemoveBadge(
+                    onClick = { onRemove(index) },
+                    modifier = Modifier.offset(x = badgeX, y = badgeY),
+                )
+            }
         }
 
         Text(
@@ -191,6 +218,7 @@ private fun ConfirmContent(
                 onValueChange = { onValueChange(index, it) },
                 onAssign = { onAssign(index, it) },
                 onRegister = { onRegister(index, it) },
+                onRemove = { onRemove(index) },
             )
         }
 
@@ -211,6 +239,7 @@ private fun DieRow(
     onValueChange: (Int) -> Unit,
     onAssign: (Long) -> Unit,
     onRegister: (String) -> Unit,
+    onRemove: () -> Unit,
 ) {
     var showRegisterDialog by remember { mutableStateOf(false) }
     var dropdownExpanded by remember { mutableStateOf(false) }
@@ -228,6 +257,9 @@ private fun DieRow(
                 Text(text = die.value.toString())
                 IconButton(onClick = { onValueChange(die.value + 1) }) {
                     Icon(Icons.Default.Add, contentDescription = stringResource(R.string.confirm_increment))
+                }
+                IconButton(onClick = onRemove) {
+                    Icon(Icons.Default.Close, contentDescription = stringResource(R.string.confirm_remove_die))
                 }
             }
 
@@ -308,12 +340,33 @@ private fun RegisterDieDialog(onDismiss: () -> Unit, onConfirm: (String) -> Unit
     )
 }
 
+private val BADGE_SIZE = 28.dp
+
+@Composable
+private fun RemoveBadge(onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier
+            .size(BADGE_SIZE)
+            .clip(CircleShape)
+            .background(Color(0xFFD32F2F))
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            imageVector = Icons.Default.Close,
+            contentDescription = stringResource(R.string.confirm_remove_die),
+            tint = Color.White,
+            modifier = Modifier.size(18.dp),
+        )
+    }
+}
+
 @Composable
 private fun DiceOverlay(dice: List<DieAssignment>, modifier: Modifier = Modifier) {
     val density = LocalDensity.current
     Canvas(modifier = modifier) {
         val strokeWidth = 3.dp.toPx()
-        val minLabel = with(density) { 16.dp.toPx() }
+        val labelSize = with(density) { 15.sp.toPx() }
         dice.forEachIndexed { index, die ->
             val box = die.boundingBox
             val left = box.left * size.width
@@ -329,19 +382,20 @@ private fun DiceOverlay(dice: List<DieAssignment>, modifier: Modifier = Modifier
                 style = Stroke(width = strokeWidth),
             )
 
+            // Value chip sits just above the box so it never hides the die.
             val label = "${index + 1}: ${die.value}"
-            val textSize = (h * 0.35f).coerceAtLeast(minLabel)
             val paint = AndroidPaint().apply {
                 this.color = AndroidColor.BLACK
-                this.textSize = textSize
+                this.textSize = labelSize
                 isFakeBoldText = true
                 isAntiAlias = true
             }
-            val pad = textSize * 0.2f
+            val pad = labelSize * 0.25f
             val chipW = paint.measureText(label) + pad * 2
-            val chipH = textSize + pad * 2
-            drawRect(color = color, topLeft = Offset(left, top), size = Size(chipW, chipH))
-            drawContext.canvas.nativeCanvas.drawText(label, left + pad, top + textSize + pad * 0.6f, paint)
+            val chipH = labelSize + pad * 2
+            val chipTop = (top - chipH).coerceAtLeast(0f)
+            drawRect(color = color, topLeft = Offset(left, chipTop), size = Size(chipW, chipH))
+            drawContext.canvas.nativeCanvas.drawText(label, left + pad, chipTop + labelSize + pad * 0.6f, paint)
         }
     }
 }
