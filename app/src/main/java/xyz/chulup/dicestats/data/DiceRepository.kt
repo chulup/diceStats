@@ -9,6 +9,7 @@ import xyz.chulup.dicestats.data.db.RollEntity
 import xyz.chulup.dicestats.data.db.RollWithResults
 import xyz.chulup.dicestats.data.photo.PhotoStorage
 import xyz.chulup.dicestats.recognition.BoundingBox
+import xyz.chulup.dicestats.recognition.DieColorSignature
 import kotlinx.coroutines.flow.Flow
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -20,6 +21,8 @@ data class ConfirmedDie(
     val confidence: Float,
     val boundingBox: BoundingBox,
     val wasCorrected: Boolean,
+    /** Colour fingerprint of this crop, folded into the die's learned signature. */
+    val colorSignature: DieColorSignature? = null,
 )
 
 @Singleton
@@ -57,7 +60,18 @@ class DiceRepository @Inject constructor(
                 )
             },
         )
+        // Learn/refine each die's colour fingerprint from this confirmed roll.
+        dice.forEach { die -> die.colorSignature?.let { learnColor(die.dieId, it) } }
         return rollId
+    }
+
+    /** Folds a freshly observed crop colour into the die's running fingerprint. */
+    private suspend fun learnColor(dieId: Long, observed: DieColorSignature) {
+        val die = dieDao.getById(dieId) ?: return
+        val existing = die.colorSignature?.let { DieColorSignature.decode(it) }
+        val merged = if (existing == null) observed
+            else DieColorSignature.merge(existing, die.colorSamples, observed)
+        dieDao.updateColorSignature(dieId, merged.encode(), die.colorSamples + 1)
     }
 
     /** Deletes rolls (cascading to their results) and their photo files. */

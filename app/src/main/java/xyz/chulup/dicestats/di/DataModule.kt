@@ -20,7 +20,9 @@ object DataModule {
     @Provides
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): DiceDatabase =
-        Room.databaseBuilder(context, DiceDatabase::class.java, "dicestats.db").build()
+        Room.databaseBuilder(context, DiceDatabase::class.java, "dicestats.db")
+            .addMigrations(DiceDatabase.MIGRATION_1_2)
+            .build()
 
     @Provides
     fun provideDieDao(db: DiceDatabase): DieDao = db.dieDao()

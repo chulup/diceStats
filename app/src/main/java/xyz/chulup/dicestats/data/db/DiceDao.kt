@@ -23,6 +23,12 @@ interface DieDao {
     @Query("SELECT value FROM die_results WHERE dieId = :dieId")
     fun observeValuesForDie(dieId: Long): Flow<List<Int>>
 
+    @Query("SELECT * FROM dice WHERE id = :dieId")
+    suspend fun getById(dieId: Long): DieEntity?
+
+    @Query("UPDATE dice SET colorSignature = :signature, colorSamples = :samples WHERE id = :dieId")
+    suspend fun updateColorSignature(dieId: Long, signature: String?, samples: Int)
+
     @Insert
     suspend fun insert(die: DieEntity): Long
 }

@@ -12,6 +12,9 @@ import xyz.chulup.dicestats.data.ConfirmedDie
 import xyz.chulup.dicestats.data.DiceRepository
 import xyz.chulup.dicestats.data.db.DieEntity
 import xyz.chulup.dicestats.recognition.BoundingBox
+import xyz.chulup.dicestats.recognition.DieColorAnalyzer
+import xyz.chulup.dicestats.recognition.DieColorSignature
+import xyz.chulup.dicestats.recognition.DieIdentifier
 import xyz.chulup.dicestats.recognition.DieRecognizer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -31,6 +34,10 @@ data class DieAssignment(
     val value: Int,
     val recognizedValue: Int?,
     val dieId: Long?,
+    /** Confidence of an auto-guessed identity (null when none / user-assigned). */
+    val dieIdConfidence: Float? = null,
+    /** Colour fingerprint of this crop, carried through to persist + learn. */
+    val signature: DieColorSignature? = null,
     /** True once the user has set the value (used to resolve an unread "?" die). */
     val edited: Boolean = false,
 ) {
@@ -77,6 +84,8 @@ class DetectionViewModel @Inject constructor(
         savedStateHandle.get<String>(ARG_PHOTO_PATH) ?: error("photoPath argument required")
 
     private val recognizer = DieRecognizer()
+    private val colorAnalyzer = DieColorAnalyzer()
+    private val identifier = DieIdentifier()
 
     private val registeredDice = repository.dice
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
@@ -106,16 +115,24 @@ class DetectionViewModel @Inject constructor(
                 val bitmap = withContext(Dispatchers.Default) { decodeOriented(photoPath) }
                     ?: error("Could not decode photo")
                 val detected = recognizer.recognize(bitmap)
-                val ratio = bitmap.width.toFloat() / bitmap.height.toFloat()
-                bitmap.recycle()
-                ratio to detected.map {
+                val candidates = identityCandidates(registeredDice.value)
+                val assignments = detected.map { det ->
+                    val signature = colorAnalyzer.signature(bitmap, det.boundingBox)
+                    val guess = signature
+                        ?.let { identifier.identify(it, candidates) }
+                        ?.takeIf { it.confidence >= DieIdentifier.IDENTITY_CONFIRM_THRESHOLD }
                     DieAssignment(
-                        boundingBox = it.boundingBox,
-                        value = it.value ?: DEFAULT_VALUE,
-                        recognizedValue = it.value,
-                        dieId = null,
+                        boundingBox = det.boundingBox,
+                        value = det.value ?: DEFAULT_VALUE,
+                        recognizedValue = det.value,
+                        dieId = guess?.dieId,
+                        dieIdConfidence = guess?.confidence,
+                        signature = signature,
                     )
                 }
+                val ratio = bitmap.width.toFloat() / bitmap.height.toFloat()
+                bitmap.recycle()
+                ratio to assignments
             }
             _uiState.value = result.fold(
                 onSuccess = { (ratio, dice) ->
@@ -131,6 +148,13 @@ class DetectionViewModel @Inject constructor(
             )
         }
     }
+
+    private fun identityCandidates(dice: List<DieEntity>): List<DieIdentifier.Candidate> =
+        dice.mapNotNull { d ->
+            d.colorSignature
+                ?.let { DieColorSignature.decode(it) }
+                ?.let { DieIdentifier.Candidate(d.id, it) }
+        }
 
     fun setValue(index: Int, value: Int) =
         updateDie(index) { it.copy(value = value.coerceIn(MIN_VALUE, MAX_VALUE), edited = true) }
@@ -205,6 +229,7 @@ class DetectionViewModel @Inject constructor(
                     confidence = if (die.recognizedValue == die.value) 1f else 0f,
                     boundingBox = die.boundingBox,
                     wasCorrected = die.recognizedValue != die.value,
+                    colorSignature = die.signature,
                 )
             }
             repository.saveRoll(photoPath, System.currentTimeMillis(), confirmed)
