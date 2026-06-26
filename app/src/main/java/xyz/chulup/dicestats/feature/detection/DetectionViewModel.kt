@@ -31,7 +31,12 @@ data class DieAssignment(
     val value: Int,
     val recognizedValue: Int?,
     val dieId: Long?,
-)
+    /** True once the user has set the value (used to resolve an unread "?" die). */
+    val edited: Boolean = false,
+) {
+    /** Whether a definite value is established (auto-recognized or user-set). */
+    val hasValue: Boolean get() = recognizedValue != null || edited
+}
 
 sealed interface DetectionUiState {
     data object Loading : DetectionUiState
@@ -111,7 +116,7 @@ class DetectionViewModel @Inject constructor(
     }
 
     fun setValue(index: Int, value: Int) =
-        updateDie(index) { it.copy(value = value.coerceIn(MIN_VALUE, MAX_VALUE)) }
+        updateDie(index) { it.copy(value = value.coerceIn(MIN_VALUE, MAX_VALUE), edited = true) }
 
     /** Drops a detected die the user judges to be a false positive. */
     fun removeDie(index: Int) {

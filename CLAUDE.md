@@ -23,6 +23,7 @@ Guidance for Claude Code when working in this Android project.
 ```bash
 ./gradlew assembleDebug        # build debug APK
 ./gradlew installDebug         # build + install on connected device/emulator
+./scripts/build-install.sh     # build + install on the remote-ADB device (picks the matching ABI split)
 ./gradlew test                 # JVM unit tests
 ./gradlew connectedAndroidTest # instrumented tests (needs device/emulator)
 ./gradlew lint                 # Android lint

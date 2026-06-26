@@ -342,6 +342,12 @@ private fun RegisterDieDialog(onDismiss: () -> Unit, onConfirm: (String) -> Unit
 
 private val BADGE_SIZE = 28.dp
 
+/** Outline/label colour for a die whose pip value was recognized. */
+private val recognizedDieColor = Color(0xFF00E676)
+
+/** Outline/label colour for a proposed region with no readable value. */
+private val unknownDieColor = Color(0xFFFFC107)
+
 @Composable
 private fun RemoveBadge(onClick: () -> Unit, modifier: Modifier = Modifier) {
     Box(
@@ -373,7 +379,9 @@ private fun DiceOverlay(dice: List<DieAssignment>, modifier: Modifier = Modifier
             val top = box.top * size.height
             val w = box.width * size.width
             val h = box.height * size.height
-            val color = Color(0xFF00E676)
+            // Green once a value is established (read or user-set); amber flags an
+            // unresolved region to review.
+            val color = if (die.hasValue) recognizedDieColor else unknownDieColor
 
             drawRect(
                 color = color,
@@ -383,7 +391,7 @@ private fun DiceOverlay(dice: List<DieAssignment>, modifier: Modifier = Modifier
             )
 
             // Value chip sits just above the box so it never hides the die.
-            val label = "${index + 1}: ${die.value}"
+            val label = if (die.hasValue) "${index + 1}: ${die.value}" else "${index + 1}: ?"
             val paint = AndroidPaint().apply {
                 this.color = AndroidColor.BLACK
                 this.textSize = labelSize
