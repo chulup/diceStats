@@ -142,6 +142,51 @@
           "color": "red"
         }
       ]
+    },
+    {
+      "picture_name": "10.jpg",
+      "dice": [
+        {
+          "boundingBox": { "left": 0.2070, "top": 0.4767, "right": 0.2813, "bottom": 0.5648 },
+          "value": 5,
+          "color": "yellow"
+        },
+        {
+          "boundingBox": { "left": 0.4414, "top": 0.4948, "right": 0.5078, "bottom": 0.5829 },
+          "value": 5,
+          "color": "red"
+        }
+      ]
+    },
+    {
+      "picture_name": "11.jpg",
+      "dice": [
+        {
+          "boundingBox": { "left": 0.1065, "top": 0.1641, "right": 0.2935, "bottom": 0.3086 },
+          "value": 4,
+          "color": "yellow"
+        },
+        {
+          "boundingBox": { "left": 0.7948, "top": 0.6973, "right": 0.9688, "bottom": 0.8203 },
+          "value": 5,
+          "color": "red"
+        }
+      ]
+    },
+    {
+      "picture_name": "12.jpg",
+      "dice": [
+        {
+          "boundingBox": { "left": 0.5957, "top": 0.3005, "right": 0.6797, "bottom": 0.4197 },
+          "value": 6,
+          "color": "red"
+        },
+        {
+          "boundingBox": { "left": 0.3672, "top": 0.6192, "right": 0.4570, "bottom": 0.7254 },
+          "value": 6,
+          "color": "yellow"
+        }
+      ]
     }
   ]
 }

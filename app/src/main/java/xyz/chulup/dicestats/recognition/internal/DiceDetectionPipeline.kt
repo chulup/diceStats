@@ -21,8 +21,19 @@ internal object DiceDetectionPipeline {
     data class Params(
         /** Longest edge the image is scaled to before analysis. */
         val workingMaxEdge: Int = 512,
-        /** Min HSV saturation (0..255) for a pixel to count as a colored die surface. */
+        /**
+         * Floor for the HSV saturation (0..255) a pixel needs to count as a colored die
+         * surface. The effective threshold is raised adaptively above this on saturated
+         * backgrounds (see [saturationMargin]); on plain backgrounds it stays at the floor.
+         */
         val minSaturation: Int = 100,
+        /**
+         * How far above the image's **median** saturation the threshold is set. Warm wood,
+         * felt, and other coloured surfaces are themselves saturated and would otherwise
+         * flood a fixed threshold; keying off the median (the background level) lets the
+         * dice — the saturated minority — stand out regardless of the surface.
+         */
+        val saturationMargin: Int = 25,
         /** Min HSV value/brightness (0..255); rejects dark backgrounds. */
         val minValue: Int = 90,
         /** Morphology radii (square structuring element): open removes speckle, close fills pips. */
@@ -51,7 +62,12 @@ internal object DiceDetectionPipeline {
         val w = scaled.width
         val h = scaled.height
 
-        val mask = saturationValueMask(scaled.pixels, params.minSaturation, params.minValue)
+        // Adaptive saturation floor: raise the threshold to the background (median)
+        // saturation plus a margin, so coloured surfaces like wood don't flood the mask.
+        val median = medianSaturation(scaled.pixels)
+        val minSat = maxOf(params.minSaturation, median + params.saturationMargin)
+
+        val mask = saturationValueMask(scaled.pixels, minSat, params.minValue)
         morphOpen(mask, w, h, params.openRadius)
         morphClose(mask, w, h, params.closeRadius)
 
@@ -122,6 +138,23 @@ internal object DiceDetectionPipeline {
             }
         }
         return Scaled(out, dw, dh)
+    }
+
+    /** Median HSV saturation over all pixels — a robust estimate of the background level. */
+    private fun medianSaturation(pixels: IntArray): Int {
+        if (pixels.isEmpty()) return 0
+        val sats = IntArray(pixels.size)
+        for (i in pixels.indices) {
+            val p = pixels[i]
+            val r = (p shr 16) and 0xFF
+            val g = (p shr 8) and 0xFF
+            val b = p and 0xFF
+            val max = maxOf(r, g, b)
+            val min = minOf(r, g, b)
+            sats[i] = if (max == 0) 0 else (max - min) * 255 / max
+        }
+        sats.sort()
+        return sats[sats.size / 2]
     }
 
     /** Foreground (1) where HSV saturation and value both clear their thresholds. */
