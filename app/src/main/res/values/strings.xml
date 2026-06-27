@@ -44,6 +44,12 @@
         <item quantity="other">%1$d dice detected</item>
     </plurals>
     <string name="dice_list_title">Dice</string>
+    <string name="stats_title">Stats</string>
+    <string name="stats_category_sum">Sum</string>
+    <string name="stats_category_sum_desc">Roll total distribution</string>
+    <string name="stats_category_games">Games</string>
+    <string name="stats_category_games_desc">Coming soon</string>
+    <string name="stats_section_dice">Individual dice</string>
     <string name="dice_list_empty">No dice registered yet. Save a roll to register one.</string>
     <plurals name="dice_list_roll_count">
         <item quantity="zero">No rolls</item>
@@ -61,4 +67,11 @@
     <string name="die_stats_insufficient">Not enough rolls to judge</string>
     <string name="die_stats_chi_square">Chi-square: %1$s (df 5)</string>
     <string name="die_stats_p_value">p-value: %1$s</string>
+    <string name="roll_totals_title">Roll totals</string>
+    <string name="roll_totals_empty">No rolls yet.</string>
+    <string name="roll_totals_mean">mean %1$s (expected %2$s)</string>
+    <plurals name="roll_totals_dice_count">
+        <item quantity="one">%1$d die</item>
+        <item quantity="other">%1$d dice</item>
+    </plurals>
 </resources>
