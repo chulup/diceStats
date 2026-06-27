@@ -72,7 +72,52 @@ each die assigned and its value recorded. ✓
 **Done when:** tapping a registered die shows its face distribution and a
 fairness indicator. ✓
 
+## Step 6 — Automatic dice identification
+
+**Goal:** Guess which registered die each detected face is, so the confirm screen
+pre-fills the assignment instead of requiring it every time.
+
+- [x] Colour fingerprint (`DieColorSignature`, `ColorFingerprintPipeline`):
+      saturation-weighted hue + lightness per face, pips/highlights excluded.
+- [x] Auto-learn: each saved roll folds the crop's colour into the die's running
+      fingerprint (`dice.colorSignature`/`colorSamples`, DB v2 + migration).
+- [x] Match on capture (`DieIdentifier`): confident guesses pre-fill the die;
+      unsure ones fall back to manual tap-to-identify.
+
+**Done when:** a die confirmed once is auto-assigned on later captures. ✓
+Thresholds (`MATCH_MAX_DISTANCE`, `IDENTITY_CONFIRM_THRESHOLD`) are starting
+hypotheses still to calibrate against real labelled rolls.
+
 ---
 
 After step 5 the MVP is feature-complete. v2/v3 features (Games, Die Groups,
 Players) follow per DESIGN.md.
+
+## Future improvements (backlog)
+
+Unprioritized; capture now, schedule later.
+
+### Recognition
+- **Robust detection on bright / multicolored surfaces.** The HSV saturation+value
+  segmentation (`DiceDetectionPipeline`) assumes dice are the saturated, bright
+  objects against a duller background; bright tabletops, patterned cloths, or
+  multicolored surfaces break that assumption. Explore adaptive thresholds,
+  background modeling, or an edge/shape cue alongside colour.
+
+### Confirmation UX
+- **On-photo value steppers.** Show the +/− value buttons directly below the
+  selected die on the photo (in addition to / instead of the list rows), so
+  correcting a value doesn't mean hunting for its row. Couples with selecting a
+  die by tapping it.
+- **Capture multiple rolls in a row.** After saving a roll, offer "capture next"
+  so the user can log several rolls without bouncing back to the gallery each
+  time. Affects the capture → detection → save navigation loop.
+
+### Statistics
+- **Stats on the home page.** Surface a summary (recent fairness / per-die
+  snapshot) on the roll log / home screen instead of only behind the dice list.
+- **All dice at once on the stats page.** The stats screen should show every die
+  together (overview/comparison), drilling into a single die's detail when one is
+  chosen — rather than requiring a die be picked first.
+- **Per-game stats.** Once Games (v2) exist, show stats for all dice in a game at
+  once (aggregate + per-die breakdown within the game).
