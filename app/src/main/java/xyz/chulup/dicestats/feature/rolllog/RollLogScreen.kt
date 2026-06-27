@@ -176,9 +176,16 @@ private fun RollCell(
             modifier = Modifier.fillMaxSize(),
         )
 
-        // Summary of recognized values, e.g. "3, 4".
-        val summary = roll.results.joinToString(", ") { it.value.toString() }
-        if (summary.isNotEmpty()) {
+        // Summary of recognized values: the individual dice, prefixed by their sum
+        // when there's more than one, e.g. "(sum: 7), 3, 4".
+        val values = roll.results.map { it.value }
+        if (values.isNotEmpty()) {
+            val list = values.joinToString(", ")
+            val summary = if (values.size > 1) {
+                stringResource(R.string.roll_summary_with_sum, values.sum(), list)
+            } else {
+                list
+            }
             Text(
                 text = summary,
                 color = Color.White,

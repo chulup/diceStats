@@ -4,6 +4,7 @@
     <string name="roll_log_capture">Roll</string>
     <string name="roll_log_empty">No rolls yet. Tap Roll to capture one.</string>
     <string name="roll_photo_desc">Roll photo</string>
+    <string name="roll_summary_with_sum">(Σ %1$d), %2$s</string>
     <string name="selection_clear">Clear selection</string>
     <string name="selection_delete">Delete selected</string>
     <plurals name="selection_count">
