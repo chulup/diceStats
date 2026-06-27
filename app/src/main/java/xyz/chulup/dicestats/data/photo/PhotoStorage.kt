@@ -17,8 +17,26 @@ class PhotoStorage(context: Context) {
             if (!exists()) mkdirs()
         }
 
+    /** Dir for badly-recognized captures kept for later analysis. */
+    private val reportsDir: File
+        get() = File(appContext.getExternalFilesDir(null), REPORTS_DIR_NAME).apply {
+            if (!exists()) mkdirs()
+        }
+
     /** A new, not-yet-written file for the next capture. */
     fun newPhotoFile(): File = File(rollsDir, "roll_${System.currentTimeMillis()}.jpg")
+
+    /**
+     * Files a badly-recognized capture for later analysis: copies [source] into the
+     * reports dir alongside a sibling `.json` holding [metadataJson]. Returns the copy.
+     */
+    fun saveReport(source: File, metadataJson: String): File {
+        val stamp = System.currentTimeMillis()
+        val photo = File(reportsDir, "unrecognized_$stamp.jpg")
+        source.copyTo(photo, overwrite = true)
+        File(reportsDir, "unrecognized_$stamp.json").writeText(metadataJson)
+        return photo
+    }
 
     /** All stored roll photos, newest first. */
     fun listPhotos(): List<File> =
@@ -37,5 +55,6 @@ class PhotoStorage(context: Context) {
 
     private companion object {
         const val DIR_NAME = "rolls"
+        const val REPORTS_DIR_NAME = "unrecognized"
     }
 }

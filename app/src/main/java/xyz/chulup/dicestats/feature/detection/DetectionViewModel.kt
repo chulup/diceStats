@@ -25,6 +25,8 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.json.JSONArray
+import org.json.JSONObject
 import java.io.File
 import javax.inject.Inject
 
@@ -92,6 +94,10 @@ class DetectionViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow<DetectionUiState>(DetectionUiState.Loading)
     val uiState: StateFlow<DetectionUiState> = _uiState.asStateFlow()
+
+    /** Flips true once the photo has been filed for later analysis (drives navigation). */
+    private val _reported = MutableStateFlow(false)
+    val reported: StateFlow<Boolean> = _reported.asStateFlow()
 
     init {
         recognize()
@@ -235,6 +241,50 @@ class DetectionViewModel @Inject constructor(
             repository.saveRoll(photoPath, System.currentTimeMillis(), confirmed)
             _uiState.update { (it as DetectionUiState.Ready).copy(saving = false, saved = true) }
         }
+    }
+
+    /**
+     * Files the current photo (with the recognizer's output as metadata) for later
+     * analysis, then discards the original capture and signals navigation back to
+     * the camera. A development aid for collecting badly-recognized photos.
+     */
+    fun reportUnrecognized() {
+        if (_reported.value) return
+        val metadata = buildReportMetadata()
+        viewModelScope.launch {
+            repository.reportUnrecognized(photoPath, metadata)
+            discardPhoto()
+            _reported.value = true
+        }
+    }
+
+    private fun buildReportMetadata(): String {
+        val json = JSONObject()
+        json.put("reportedAt", System.currentTimeMillis())
+        json.put("photo", File(photoPath).name)
+        when (val state = _uiState.value) {
+            is DetectionUiState.Ready -> {
+                json.put("aspectRatio", state.aspectRatio.toDouble())
+                val dice = JSONArray()
+                state.dice.forEach { die ->
+                    val box = die.boundingBox
+                    val entry = JSONObject()
+                    entry.put(
+                        "box",
+                        JSONArray(listOf(box.left, box.top, box.right, box.bottom)),
+                    )
+                    entry.put("recognizedValue", die.recognizedValue ?: JSONObject.NULL)
+                    entry.put("value", die.value)
+                    entry.put("dieIdConfidence", die.dieIdConfidence ?: JSONObject.NULL)
+                    dice.put(entry)
+                }
+                json.put("dice", dice)
+            }
+
+            is DetectionUiState.Error -> json.put("error", state.message)
+            DetectionUiState.Loading -> json.put("state", "loading")
+        }
+        return json.toString()
     }
 
     /** Deletes the captured photo when the user retakes or backs out without saving. */

@@ -23,6 +23,7 @@
     <string name="detection_retake">Retake photo</string>
     <string name="confirm_title">Confirm roll</string>
     <string name="confirm_save">Save</string>
+    <string name="report_unrecognized">Report</string>
     <string name="confirm_die_number">Die %1$d</string>
     <string name="confirm_decrement">Decrease value</string>
     <string name="confirm_increment">Increase value</string>

@@ -10,7 +10,10 @@ import xyz.chulup.dicestats.data.db.RollWithResults
 import xyz.chulup.dicestats.data.photo.PhotoStorage
 import xyz.chulup.dicestats.recognition.BoundingBox
 import xyz.chulup.dicestats.recognition.DieColorSignature
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.withContext
+import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -72,6 +75,13 @@ class DiceRepository @Inject constructor(
         val merged = if (existing == null) observed
             else DieColorSignature.merge(existing, die.colorSamples, observed)
         dieDao.updateColorSignature(dieId, merged.encode(), die.colorSamples + 1)
+    }
+
+    /** Files a badly-recognized capture (photo + metadata) for later analysis. */
+    suspend fun reportUnrecognized(photoPath: String, metadataJson: String) {
+        withContext(Dispatchers.IO) {
+            photoStorage.saveReport(File(photoPath), metadataJson)
+        }
     }
 
     /** Deletes rolls (cascading to their results) and their photo files. */

@@ -85,13 +85,18 @@ fun DetectionScreen(
     onBack: () -> Unit,
     onRetake: () -> Unit,
     onSaved: () -> Unit,
+    onReported: () -> Unit,
     viewModel: DetectionViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val reported by viewModel.reported.collectAsStateWithLifecycle()
 
     val ready = uiState as? DetectionUiState.Ready
     LaunchedEffect(ready?.saved) {
         if (ready?.saved == true) onSaved()
+    }
+    LaunchedEffect(reported) {
+        if (reported) onReported()
     }
 
     Scaffold(
@@ -128,6 +133,13 @@ fun DetectionScreen(
                     Icon(Icons.Default.Refresh, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
                     Text(stringResource(R.string.detection_retake))
+                }
+                OutlinedButton(
+                    onClick = viewModel::reportUnrecognized,
+                    enabled = ready?.saving != true,
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text(stringResource(R.string.report_unrecognized))
                 }
                 Button(
                     onClick = viewModel::save,

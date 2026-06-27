@@ -84,6 +84,12 @@ fun DiceStatsNavHost() {
                     }
                 },
                 onSaved = { navController.popBackStack(Routes.ROLL_LOG, inclusive = false) },
+                // Report a bad photo and immediately reopen the camera for another shot.
+                onReported = {
+                    navController.navigate(Routes.CAPTURE) {
+                        popUpTo(Routes.DETECTION) { inclusive = true }
+                    }
+                },
             )
         }
     }
