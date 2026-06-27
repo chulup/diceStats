@@ -70,12 +70,9 @@ fun DiceStatsNavHost() {
             arguments = listOf(
                 navArgument(Routes.DETECTION_ARG_PHOTO_PATH) { type = NavType.StringType },
             ),
-        ) { backStackEntry ->
-            val photoPath = backStackEntry.arguments
-                ?.getString(Routes.DETECTION_ARG_PHOTO_PATH)
-                .orEmpty()
+        ) {
+            // The photo path is read from the nav argument by DetectionViewModel.
             DetectionScreen(
-                photoPath = photoPath,
                 onBack = { navController.popBackStack() },
                 // Retake: reopen the camera, replacing this detection on the back stack.
                 onRetake = {

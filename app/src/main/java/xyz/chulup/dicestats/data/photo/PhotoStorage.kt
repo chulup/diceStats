@@ -1,6 +1,7 @@
 package xyz.chulup.dicestats.data.photo
 
 import android.content.Context
+import android.graphics.Bitmap
 import java.io.File
 
 /**
@@ -25,6 +26,13 @@ class PhotoStorage(context: Context) {
 
     /** A new, not-yet-written file for the next capture. */
     fun newPhotoFile(): File = File(rollsDir, "roll_${System.currentTimeMillis()}.jpg")
+
+    /** Compresses [bitmap] to a new JPEG in the rolls dir and returns it. */
+    fun writePhoto(bitmap: Bitmap): File {
+        val file = newPhotoFile()
+        file.outputStream().use { bitmap.compress(Bitmap.CompressFormat.JPEG, 95, it) }
+        return file
+    }
 
     /**
      * Files a badly-recognized capture for later analysis: copies [source] into the

@@ -2,7 +2,9 @@ package xyz.chulup.dicestats.feature.detection
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.BitmapRegionDecoder
 import android.graphics.Matrix
+import android.graphics.Rect
 import android.media.ExifInterface
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
@@ -16,6 +18,7 @@ import xyz.chulup.dicestats.recognition.DieColorAnalyzer
 import xyz.chulup.dicestats.recognition.DieColorSignature
 import xyz.chulup.dicestats.recognition.DieIdentifier
 import xyz.chulup.dicestats.recognition.DieRecognizer
+import xyz.chulup.dicestats.recognition.mapOrientedRegionToRaw
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -51,6 +54,8 @@ sealed interface DetectionUiState {
     data object Loading : DetectionUiState
 
     data class Ready(
+        /** The photo currently shown — the capture, or a cropped region the user re-detected. */
+        val photoPath: String,
         val aspectRatio: Float,
         val dice: List<DieAssignment>,
         val registeredDice: List<DieEntity>,
@@ -58,6 +63,8 @@ sealed interface DetectionUiState {
         val activeDieId: Long? = null,
         val saving: Boolean = false,
         val saved: Boolean = false,
+        /** True while re-detection on a cropped region is running. */
+        val detecting: Boolean = false,
     ) : DetectionUiState {
         /** Every die must be assigned and have a valid value before saving (DESIGN.md). */
         val canSave: Boolean
@@ -82,7 +89,8 @@ class DetectionViewModel @Inject constructor(
     private val repository: DiceRepository,
 ) : ViewModel() {
 
-    private val photoPath: String =
+    /** The working photo — starts as the capture, becomes the crop when re-detecting. */
+    private var currentPhotoPath: String =
         savedStateHandle.get<String>(ARG_PHOTO_PATH) ?: error("photoPath argument required")
 
     private val recognizer = DieRecognizer()
@@ -118,24 +126,9 @@ class DetectionViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.value = DetectionUiState.Loading
             val result = runCatching {
-                val bitmap = withContext(Dispatchers.Default) { decodeOriented(photoPath) }
+                val bitmap = withContext(Dispatchers.Default) { decodeOriented(currentPhotoPath) }
                     ?: error("Could not decode photo")
-                val detected = recognizer.recognize(bitmap)
-                val candidates = identityCandidates(registeredDice.value)
-                val assignments = detected.map { det ->
-                    val signature = colorAnalyzer.signature(bitmap, det.boundingBox)
-                    val guess = signature
-                        ?.let { identifier.identify(it, candidates) }
-                        ?.takeIf { it.confidence >= DieIdentifier.IDENTITY_CONFIRM_THRESHOLD }
-                    DieAssignment(
-                        boundingBox = det.boundingBox,
-                        value = det.value ?: DEFAULT_VALUE,
-                        recognizedValue = det.value,
-                        dieId = guess?.dieId,
-                        dieIdConfidence = guess?.confidence,
-                        signature = signature,
-                    )
-                }
+                val assignments = buildAssignments(bitmap, registeredDice.value)
                 val ratio = bitmap.width.toFloat() / bitmap.height.toFloat()
                 bitmap.recycle()
                 ratio to assignments
@@ -144,6 +137,7 @@ class DetectionViewModel @Inject constructor(
                 onSuccess = { (ratio, dice) ->
                     val registered = registeredDice.value
                     DetectionUiState.Ready(
+                        photoPath = currentPhotoPath,
                         aspectRatio = ratio,
                         dice = dice,
                         registeredDice = registered,
@@ -151,6 +145,68 @@ class DetectionViewModel @Inject constructor(
                     )
                 },
                 onFailure = { DetectionUiState.Error(it.message ?: "Detection failed") },
+            )
+        }
+    }
+
+    /**
+     * Re-detects on the user-selected [region] (normalized, in display coordinates):
+     * crops the current photo to that region at native resolution, makes the crop the
+     * new working photo, and runs detection afresh — replacing the prior photo and
+     * results so the user can drill into dice the full-frame pass missed.
+     */
+    fun detectInRegion(region: BoundingBox) {
+        val state = _uiState.value as? DetectionUiState.Ready ?: return
+        if (state.detecting) return
+        val previousPath = currentPhotoPath
+        _uiState.update { (it as DetectionUiState.Ready).copy(detecting = true) }
+        viewModelScope.launch {
+            val outcome = withContext(Dispatchers.Default) {
+                val crop = decodeRegion(previousPath, region) ?: return@withContext null
+                val dice = buildAssignments(crop, registeredDice.value)
+                val ratio = crop.width.toFloat() / crop.height.toFloat()
+                val newPath = repository.storePhoto(crop)
+                crop.recycle()
+                Triple(newPath, ratio, dice)
+            }
+            if (outcome == null) {
+                _uiState.update { if (it is DetectionUiState.Ready) it.copy(detecting = false) else it }
+                return@launch
+            }
+            val (newPath, ratio, dice) = outcome
+            currentPhotoPath = newPath
+            withContext(Dispatchers.IO) { runCatching { File(previousPath).delete() } }
+            _uiState.update { current ->
+                if (current !is DetectionUiState.Ready) return@update current
+                current.copy(
+                    photoPath = newPath,
+                    aspectRatio = ratio,
+                    dice = dice,
+                    detecting = false,
+                )
+            }
+        }
+    }
+
+    /** Builds confirm-screen assignments from a freshly detected [bitmap]. */
+    private suspend fun buildAssignments(
+        bitmap: Bitmap,
+        registered: List<DieEntity>,
+    ): List<DieAssignment> {
+        val detected = recognizer.recognize(bitmap)
+        val candidates = identityCandidates(registered)
+        return detected.map { det ->
+            val signature = colorAnalyzer.signature(bitmap, det.boundingBox)
+            val guess = signature
+                ?.let { identifier.identify(it, candidates) }
+                ?.takeIf { it.confidence >= DieIdentifier.IDENTITY_CONFIRM_THRESHOLD }
+            DieAssignment(
+                boundingBox = det.boundingBox,
+                value = det.value ?: DEFAULT_VALUE,
+                recognizedValue = det.value,
+                dieId = guess?.dieId,
+                dieIdConfidence = guess?.confidence,
+                signature = signature,
             )
         }
     }
@@ -238,7 +294,7 @@ class DetectionViewModel @Inject constructor(
                     colorSignature = die.signature,
                 )
             }
-            repository.saveRoll(photoPath, System.currentTimeMillis(), confirmed)
+            repository.saveRoll(currentPhotoPath, System.currentTimeMillis(), confirmed)
             _uiState.update { (it as DetectionUiState.Ready).copy(saving = false, saved = true) }
         }
     }
@@ -252,7 +308,7 @@ class DetectionViewModel @Inject constructor(
         if (_reported.value) return
         val metadata = buildReportMetadata()
         viewModelScope.launch {
-            repository.reportUnrecognized(photoPath, metadata)
+            repository.reportUnrecognized(currentPhotoPath, metadata)
             discardPhoto()
             _reported.value = true
         }
@@ -261,7 +317,7 @@ class DetectionViewModel @Inject constructor(
     private fun buildReportMetadata(): String {
         val json = JSONObject()
         json.put("reportedAt", System.currentTimeMillis())
-        json.put("photo", File(photoPath).name)
+        json.put("photo", File(currentPhotoPath).name)
         when (val state = _uiState.value) {
             is DetectionUiState.Ready -> {
                 json.put("aspectRatio", state.aspectRatio.toDouble())
@@ -290,7 +346,7 @@ class DetectionViewModel @Inject constructor(
     /** Deletes the captured photo when the user retakes or backs out without saving. */
     fun discardPhoto() {
         viewModelScope.launch(Dispatchers.IO) {
-            runCatching { File(photoPath).delete() }
+            runCatching { File(currentPhotoPath).delete() }
         }
     }
 
@@ -323,6 +379,40 @@ class DetectionViewModel @Inject constructor(
         return rotated
     }
 
+    /**
+     * Decodes [region] (normalized, in display coordinates) from [path] at native
+     * resolution via [BitmapRegionDecoder], returning the crop oriented for display.
+     * Decoding the sub-rectangle from the original file (rather than cropping the
+     * downscaled bitmap) is what recovers detail for small dice.
+     */
+    private fun decodeRegion(path: String, region: BoundingBox): Bitmap? {
+        val file = File(path)
+        if (!file.exists()) return null
+
+        @Suppress("DEPRECATION")
+        val decoder = file.inputStream().use { BitmapRegionDecoder.newInstance(it, false) }
+            ?: return null
+        try {
+            val rotation = exifRotationDegrees(path)
+            val raw = mapOrientedRegionToRaw(region, decoder.width, decoder.height, rotation)
+            val rect = Rect(raw.left, raw.top, raw.right, raw.bottom)
+            if (rect.width() <= 0 || rect.height() <= 0) return null
+
+            val options = BitmapFactory.Options().apply {
+                inSampleSize = sampleSizeFor(rect.width(), rect.height(), REGION_TARGET_MAX_EDGE)
+            }
+            val decoded = decoder.decodeRegion(rect, options) ?: return null
+
+            if (rotation == 0) return decoded
+            val matrix = Matrix().apply { postRotate(rotation.toFloat()) }
+            val rotated = Bitmap.createBitmap(decoded, 0, 0, decoded.width, decoded.height, matrix, true)
+            if (rotated != decoded) decoded.recycle()
+            return rotated
+        } finally {
+            decoder.recycle()
+        }
+    }
+
     private fun exifRotationDegrees(path: String): Int =
         when (ExifInterface(path).getAttributeInt(
             ExifInterface.TAG_ORIENTATION,
@@ -347,6 +437,7 @@ class DetectionViewModel @Inject constructor(
     companion object {
         const val ARG_PHOTO_PATH = "photoPath"
         private const val TARGET_MAX_EDGE = 1280
+        private const val REGION_TARGET_MAX_EDGE = 1280
         private const val MIN_VALUE = 1
         private const val MAX_VALUE = 6
         private const val DEFAULT_VALUE = 1

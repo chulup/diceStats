@@ -1,5 +1,6 @@
 package xyz.chulup.dicestats.data
 
+import android.graphics.Bitmap
 import xyz.chulup.dicestats.data.db.DieDao
 import xyz.chulup.dicestats.data.db.DieEntity
 import xyz.chulup.dicestats.data.db.DieResultEntity
@@ -76,6 +77,10 @@ class DiceRepository @Inject constructor(
             else DieColorSignature.merge(existing, die.colorSamples, observed)
         dieDao.updateColorSignature(dieId, merged.encode(), die.colorSamples + 1)
     }
+
+    /** Persists [bitmap] as a new roll photo and returns its absolute path. */
+    suspend fun storePhoto(bitmap: Bitmap): String =
+        withContext(Dispatchers.IO) { photoStorage.writePhoto(bitmap).absolutePath }
 
     /** Files a badly-recognized capture (photo + metadata) for later analysis. */
     suspend fun reportUnrecognized(photoPath: String, metadataJson: String) {

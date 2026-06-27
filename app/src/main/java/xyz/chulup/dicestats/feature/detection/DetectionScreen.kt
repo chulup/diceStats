@@ -3,6 +3,8 @@ package xyz.chulup.dicestats.feature.detection
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -51,6 +53,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -62,7 +65,9 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.pluralStringResource
@@ -74,6 +79,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import xyz.chulup.dicestats.R
 import xyz.chulup.dicestats.data.db.DieEntity
+import xyz.chulup.dicestats.recognition.BoundingBox
 import java.io.File
 import android.graphics.Color as AndroidColor
 import android.graphics.Paint as AndroidPaint
@@ -81,7 +87,6 @@ import android.graphics.Paint as AndroidPaint
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DetectionScreen(
-    photoPath: String,
     onBack: () -> Unit,
     onRetake: () -> Unit,
     onSaved: () -> Unit,
@@ -120,23 +125,26 @@ fun DetectionScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(16.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    .padding(horizontal = 8.dp, vertical = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
             ) {
+                val buttonPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp)
                 OutlinedButton(
                     onClick = {
                         viewModel.discardPhoto()
                         onRetake()
                     },
+                    contentPadding = buttonPadding,
                     modifier = Modifier.weight(1f),
                 ) {
                     Icon(Icons.Default.Refresh, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
+                    Spacer(Modifier.width(4.dp))
                     Text(stringResource(R.string.detection_retake))
                 }
                 OutlinedButton(
                     onClick = viewModel::reportUnrecognized,
                     enabled = ready?.saving != true,
+                    contentPadding = buttonPadding,
                     modifier = Modifier.weight(1f),
                 ) {
                     Text(stringResource(R.string.report_unrecognized))
@@ -144,6 +152,7 @@ fun DetectionScreen(
                 Button(
                     onClick = viewModel::save,
                     enabled = ready?.canSave == true && !ready.saving,
+                    contentPadding = buttonPadding,
                     modifier = Modifier.weight(1f),
                 ) {
                     Text(stringResource(R.string.confirm_save))
@@ -166,7 +175,6 @@ fun DetectionScreen(
                 )
 
                 is DetectionUiState.Ready -> ConfirmContent(
-                    photoPath = photoPath,
                     state = state,
                     onValueChange = viewModel::setValue,
                     onAssign = viewModel::assignDie,
@@ -175,6 +183,7 @@ fun DetectionScreen(
                     onIdentify = viewModel::identifyAsActive,
                     onSelectActive = viewModel::selectActiveDie,
                     onRegisterActive = viewModel::registerAndSetActive,
+                    onDetectRegion = viewModel::detectInRegion,
                 )
             }
         }
@@ -183,7 +192,6 @@ fun DetectionScreen(
 
 @Composable
 private fun ConfirmContent(
-    photoPath: String,
     state: DetectionUiState.Ready,
     onValueChange: (Int, Int) -> Unit,
     onAssign: (Int, Long) -> Unit,
@@ -192,9 +200,18 @@ private fun ConfirmContent(
     onIdentify: (Int) -> Unit,
     onSelectActive: (Long) -> Unit,
     onRegisterActive: (String) -> Unit,
+    onDetectRegion: (BoundingBox) -> Unit,
 ) {
     val nameFor: (Long?) -> String? = { id ->
         id?.let { dieId -> state.registeredDice.firstOrNull { it.id == dieId }?.name }
+    }
+    // Pinch-zoom / pan into the photo to frame a region for re-detection.
+    var scale by remember { mutableFloatStateOf(1f) }
+    var offset by remember { mutableStateOf(Offset.Zero) }
+    // A re-detected crop is a new photo — start it un-zoomed.
+    LaunchedEffect(state.photoPath) {
+        scale = 1f
+        offset = Offset.Zero
     }
     Column(
         modifier = Modifier
@@ -205,42 +222,92 @@ private fun ConfirmContent(
             modifier = Modifier
                 .fillMaxWidth()
                 .aspectRatio(state.aspectRatio)
-                .clipToBounds(),
+                .clipToBounds()
+                .pointerInput(state.photoPath) {
+                    detectTransformGestures { _, pan, zoom, _ ->
+                        scale = (scale * zoom).coerceIn(1f, MAX_SCALE)
+                        val maxX = (scale - 1f) * size.width / 2f
+                        val maxY = (scale - 1f) * size.height / 2f
+                        offset = if (scale <= 1f) {
+                            Offset.Zero
+                        } else {
+                            Offset(
+                                (offset.x + pan.x).coerceIn(-maxX, maxX),
+                                (offset.y + pan.y).coerceIn(-maxY, maxY),
+                            )
+                        }
+                    }
+                }
+                .pointerInput(Unit) {
+                    detectTapGestures(onDoubleTap = {
+                        scale = 1f
+                        offset = Offset.Zero
+                    })
+                },
         ) {
-            AsyncImage(
-                model = File(photoPath),
-                contentDescription = stringResource(R.string.detection_photo_desc),
-                contentScale = ContentScale.FillBounds,
-                modifier = Modifier.fillMaxSize(),
-            )
-            DiceOverlay(dice = state.dice, nameFor = nameFor, modifier = Modifier.fillMaxSize())
-
             val areaWidth = maxWidth
             val areaHeight = maxHeight
+            val viewportW = constraints.maxWidth.toFloat()
+            val viewportH = constraints.maxHeight.toFloat()
 
-            // Tapping a die identifies it as the active palette die.
-            state.dice.forEachIndexed { index, die ->
-                val box = die.boundingBox
-                Box(
-                    modifier = Modifier
-                        .offset(x = areaWidth * box.left, y = areaHeight * box.top)
-                        .size(width = areaWidth * box.width, height = areaHeight * box.height)
-                        .clickable { onIdentify(index) },
+            // The photo, overlay and per-die targets transform together, so taps stay
+            // aligned at any zoom without per-box math.
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer {
+                        scaleX = scale
+                        scaleY = scale
+                        translationX = offset.x
+                        translationY = offset.y
+                    },
+            ) {
+                AsyncImage(
+                    model = File(state.photoPath),
+                    contentDescription = stringResource(R.string.detection_photo_desc),
+                    contentScale = ContentScale.FillBounds,
+                    modifier = Modifier.fillMaxSize(),
                 )
+                DiceOverlay(dice = state.dice, nameFor = nameFor, modifier = Modifier.fillMaxSize())
+
+                // Tapping a die identifies it as the active palette die.
+                state.dice.forEachIndexed { index, die ->
+                    val box = die.boundingBox
+                    Box(
+                        modifier = Modifier
+                            .offset(x = areaWidth * box.left, y = areaHeight * box.top)
+                            .size(width = areaWidth * box.width, height = areaHeight * box.height)
+                            .clickable { onIdentify(index) },
+                    )
+                }
+
+                // A tappable remove badge just to the right of each box (kept clear of
+                // the die so it doesn't hide it).
+                state.dice.forEachIndexed { index, die ->
+                    val box = die.boundingBox
+                    val rawX = areaWidth * box.right + 4.dp
+                    val badgeX = if (rawX > areaWidth - BADGE_SIZE) areaWidth - BADGE_SIZE else rawX
+                    val rawY = areaHeight * ((box.top + box.bottom) / 2f) - BADGE_SIZE / 2
+                    val badgeY = if (rawY < 0.dp) 0.dp else rawY
+                    RemoveBadge(
+                        onClick = { onRemove(index) },
+                        modifier = Modifier.offset(x = badgeX, y = badgeY),
+                    )
+                }
             }
 
-            // A tappable remove badge just to the right of each box (kept clear of
-            // the die so it doesn't hide it).
-            state.dice.forEachIndexed { index, die ->
-                val box = die.boundingBox
-                val rawX = areaWidth * box.right + 4.dp
-                val badgeX = if (rawX > areaWidth - BADGE_SIZE) areaWidth - BADGE_SIZE else rawX
-                val rawY = areaHeight * ((box.top + box.bottom) / 2f) - BADGE_SIZE / 2
-                val badgeY = if (rawY < 0.dp) 0.dp else rawY
-                RemoveBadge(
-                    onClick = { onRemove(index) },
-                    modifier = Modifier.offset(x = badgeX, y = badgeY),
-                )
+            // Re-detect on the framed region (overlaid, not transformed).
+            if (state.detecting) {
+                CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+            } else if (scale > 1f) {
+                Button(
+                    onClick = { onDetectRegion(visibleRegion(scale, offset, viewportW, viewportH)) },
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(12.dp),
+                ) {
+                    Text(stringResource(R.string.detect_region))
+                }
             }
         }
 
@@ -457,6 +524,26 @@ private fun DicePalette(
             },
         )
     }
+}
+
+private const val MAX_SCALE = 6f
+
+/**
+ * The portion of the photo currently visible in the viewport, as a normalized
+ * [BoundingBox] (0..1). With the image centered and scaled by [scale] then translated by
+ * [offset] px, the visible width/height fraction is `1/scale` centered on the panned
+ * point. This is the region re-detection runs on.
+ */
+private fun visibleRegion(scale: Float, offset: Offset, viewportW: Float, viewportH: Float): BoundingBox {
+    val visible = 1f / scale
+    val centerX = 0.5f - offset.x / (viewportW * scale)
+    val centerY = 0.5f - offset.y / (viewportH * scale)
+    return BoundingBox(
+        left = (centerX - visible / 2f).coerceIn(0f, 1f),
+        top = (centerY - visible / 2f).coerceIn(0f, 1f),
+        right = (centerX + visible / 2f).coerceIn(0f, 1f),
+        bottom = (centerY + visible / 2f).coerceIn(0f, 1f),
+    )
 }
 
 private val BADGE_SIZE = 28.dp
