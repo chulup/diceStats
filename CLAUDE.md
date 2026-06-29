@@ -2,6 +2,26 @@
 
 Guidance for Claude Code when working in this Android project.
 
+## Docs / file map
+
+- [DESIGN.md](DESIGN.md) — architecture, data model, screens, scope/roadmap (MVP→v2→v3).
+- [DEVPLAN.md](DEVPLAN.md) — incremental build steps (1–6 done) + future-improvements backlog.
+- [RESEARCH.md](RESEARCH.md) — recognition research (see below).
+- `app/src/main/java/xyz/chulup/dicestats/` — source, package-by-feature
+  (`feature/*`, `data/*`, `recognition/*`, `ui/*`, `di/*`).
+- `photos/` + `photos/tests.txt` — recognition test images and ground truth (boxes/values).
+- `app/src/test/resources/photos/*.ppm` — downscaled JVM detection fixtures.
+
+## Recognition research (2026-06)
+
+Evaluated detecting/reading numbered + polyhedral dice (d6 numerals, d8/d10/d20/d100)
+beyond the MVP's pip-d6 case — full writeup in [RESEARCH.md](RESEARCH.md). Key conclusions:
+**detection** — keep saturation segmentation for cluttered scenes, add an Otsu/brightness
+pass for plain backgrounds (NMS union); **reading** — ready-made OCR (ML Kit) is
+insufficient, recommend a small offline TFLite digit CNN (synthetic-trained) with ML Kit as
+a bridge; **architecture** — detect → crop → route by die type → pip-count or numeral-read.
+Ornate engraved dice (photo 109) deferred. All recognition stays **offline on-device**.
+
 ## Stack
 
 - **Language:** Kotlin (prefer over Java for new code)

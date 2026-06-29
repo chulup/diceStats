@@ -103,6 +103,23 @@ Unprioritized; capture now, schedule later.
   objects against a duller background; bright tabletops, patterned cloths, or
   multicolored surfaces break that assumption. Explore adaptive thresholds,
   background modeling, or an edge/shape cue alongside colour.
+- **Read numbered & polyhedral dice (d6 with numerals, d8/d10/d20/d100).** The MVP
+  reads pip d6 only; numbered faces and non-square polyhedra defeat both the
+  square-shape detector and pip counting. Researched in [RESEARCH.md](RESEARCH.md):
+  add an **Otsu/brightness detection pass** for plain backgrounds (unioned via NMS,
+  triggered only when the scene is uncluttered), then **route by die type** to either
+  pip counting (d6) or a **numeral reader** — a small offline TFLite digit CNN trained
+  on synthetic die fonts (preferred), with bundled ML Kit OCR as a ship-now bridge.
+  Value interpretation needs the die type (d10/d100 0-indexed faces). Ornate engraved
+  dice (test photo 109) are out of scope for now.
+- **Per-die multi-face registration → template / subimage matching (future).** When a
+  user registers an *unusual* die, optionally have them photograph **every face**.
+  Recognition then becomes per-die **pattern matching / subimage search** — match a
+  detected face against that specific die's stored face images — instead of generic
+  OCR / pip counting. Robust for ornate, custom, or hard-to-OCR dice that defeat the
+  generic readers (e.g. 109). Extends the existing per-die appearance matching
+  (`DieColorSignature` / `DieIdentifier`) from a colour fingerprint to per-face image
+  templates; pairs naturally with a `referencePhotoPath`-style asset set per die.
 
 ### Confirmation UX
 - **On-photo value steppers.** Show the +/− value buttons directly below the
