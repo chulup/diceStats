@@ -10,6 +10,7 @@ import androidx.navigation.navArgument
 import xyz.chulup.dicestats.feature.capture.CaptureScreen
 import xyz.chulup.dicestats.feature.detection.DetectionScreen
 import xyz.chulup.dicestats.feature.dicelist.DiceListScreen
+import xyz.chulup.dicestats.feature.games.GameStatsScreen
 import xyz.chulup.dicestats.feature.games.GamesScreen
 import xyz.chulup.dicestats.feature.rolllog.RollLogScreen
 import xyz.chulup.dicestats.feature.stats.DieStatsScreen
@@ -28,9 +29,14 @@ object Routes {
     const val DIE_STATS_ARG_DIE_ID = "dieId"
     const val DIE_STATS = "die_stats/{$DIE_STATS_ARG_DIE_ID}"
 
+    const val GAME_STATS_ARG_GAME_ID = "gameId"
+    const val GAME_STATS = "game_stats/{$GAME_STATS_ARG_GAME_ID}"
+
     fun detection(photoPath: String): String = "detection/${Uri.encode(photoPath)}"
 
     fun dieStats(dieId: Long): String = "die_stats/$dieId"
+
+    fun gameStats(gameId: Long): String = "game_stats/$gameId"
 }
 
 @Composable
@@ -55,7 +61,18 @@ fun DiceStatsNavHost() {
             RollTotalsScreen(onBack = { navController.popBackStack() })
         }
         composable(Routes.GAMES) {
-            GamesScreen(onBack = { navController.popBackStack() })
+            GamesScreen(
+                onBack = { navController.popBackStack() },
+                onGameSelected = { gameId -> navController.navigate(Routes.gameStats(gameId)) },
+            )
+        }
+        composable(
+            route = Routes.GAME_STATS,
+            arguments = listOf(
+                navArgument(Routes.GAME_STATS_ARG_GAME_ID) { type = NavType.LongType },
+            ),
+        ) {
+            GameStatsScreen(onBack = { navController.popBackStack() })
         }
         composable(
             route = Routes.DIE_STATS,

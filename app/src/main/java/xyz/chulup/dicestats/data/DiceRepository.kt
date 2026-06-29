@@ -51,6 +51,13 @@ class DiceRepository @Inject constructor(
     /** The currently open game (at most one), or null when none is running. */
     val activeGame: Flow<GameEntity?> = gameDao.observeActive()
 
+    /** A single game by id (for the per-game stats screen). */
+    fun game(gameId: Long): Flow<GameEntity?> = gameDao.observeById(gameId)
+
+    /** The rolls (with their per-die results) captured during a game, newest first. */
+    fun rollsForGame(gameId: Long): Flow<List<RollWithResults>> =
+        rollDao.observeRollsWithResultsForGame(gameId)
+
     /** Number of rolls captured during each game, keyed by game id. */
     val rollCountsByGame: Flow<List<GameRollCount>> = gameDao.observeRollCountsByGame()
 

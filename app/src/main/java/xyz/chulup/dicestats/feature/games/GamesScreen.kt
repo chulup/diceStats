@@ -1,6 +1,7 @@
 package xyz.chulup.dicestats.feature.games
 
 import android.text.format.DateUtils
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -8,6 +9,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
@@ -41,6 +43,7 @@ import xyz.chulup.dicestats.R
 @Composable
 fun GamesScreen(
     onBack: () -> Unit,
+    onGameSelected: (Long) -> Unit,
     viewModel: GamesViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -78,7 +81,11 @@ fun GamesScreen(
         } else {
             LazyColumn(modifier = Modifier.fillMaxSize().padding(padding)) {
                 items(uiState.games, key = { it.id }) { game ->
-                    GameItem(game = game, onFinish = { viewModel.finishGame(game.id) })
+                    GameItem(
+                        game = game,
+                        onClick = { onGameSelected(game.id) },
+                        onFinish = { viewModel.finishGame(game.id) },
+                    )
                 }
             }
         }
@@ -96,7 +103,7 @@ fun GamesScreen(
 }
 
 @Composable
-private fun GameItem(game: GameRow, onFinish: () -> Unit) {
+private fun GameItem(game: GameRow, onClick: () -> Unit, onFinish: () -> Unit) {
     val timing = if (game.isActive) {
         stringResource(
             R.string.game_started_at,
@@ -126,10 +133,14 @@ private fun GameItem(game: GameRow, onFinish: () -> Unit) {
         headlineContent = { Text(game.name) },
         supportingContent = { Text("$timing · $rolls") },
         trailingContent = {
+            // Active games still expose Finish; closed games just show a drill-in chevron.
             if (game.isActive) {
                 TextButton(onClick = onFinish) { Text(stringResource(R.string.game_finish)) }
+            } else {
+                Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null)
             }
         },
+        modifier = Modifier.clickable(onClick = onClick),
     )
 }
 

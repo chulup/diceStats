@@ -48,6 +48,10 @@ interface RollDao {
     @Query("SELECT * FROM rolls ORDER BY capturedAt DESC")
     fun observeRollsWithResults(): Flow<List<RollWithResults>>
 
+    @Transaction
+    @Query("SELECT * FROM rolls WHERE gameId = :gameId ORDER BY capturedAt DESC")
+    fun observeRollsWithResultsForGame(gameId: Long): Flow<List<RollWithResults>>
+
     @Query("SELECT photoPath FROM rolls WHERE id IN (:ids)")
     suspend fun photoPathsFor(ids: List<Long>): List<String>
 
@@ -65,6 +69,9 @@ interface GameDao {
 
     @Query("SELECT * FROM games ORDER BY startedAt DESC")
     fun observeAll(): Flow<List<GameEntity>>
+
+    @Query("SELECT * FROM games WHERE id = :id")
+    fun observeById(id: Long): Flow<GameEntity?>
 
     /** The single open game (most recent if data is ever inconsistent), or null. */
     @Query("SELECT * FROM games WHERE endedAt IS NULL ORDER BY startedAt DESC LIMIT 1")
