@@ -8,17 +8,28 @@ see [DESIGN.md](DESIGN.md) for the full architecture this works toward.
 Focused on evaluating and tuning the Otsu detection pass (see
 [RESEARCH.md](RESEARCH.md) / `DiceDetectionPipeline`).
 
-- [ ] **Incorporate OpenCV into unit tests on the dev machine.** The app's OpenCV
-      dependency is an Android AAR (native libs are NDK-only) and `PipCounter` is tied
-      to `android.graphics.Bitmap`, so pip counting can't run in JVM tests today. Add a
-      desktop OpenCV build for tests and decouple the counting core from `Bitmap` so
-      values can be read off-device.
+- [x] **Incorporate OpenCV into unit tests on the dev machine.** Done: migrated OpenCV
+      from the Android-only AAR to the bytedeco/JavaCPP build (natives for both
+      `android-arm64` and desktop `linux-x86_64`) and split a `Bitmap`-free
+      `PipCounter.count(Mat, box)` core, so the real pip counter runs in JVM tests
+      (`PhotoDetectionTest`). Verified on-device (no recognition regression).
 - [ ] **Add a dev overlay on the detection screen.** On top of the photo: an otsu
       on/off control, and the dice found **with** Otsu vs **without** it (each labelled
       with its value, or `?` when undetermined). Log that information together with the
       file name for later analysis.
 - [ ] **Test against all d6-only photos in `./photos`** (aside from disabled ones), and
       log the same information (dice found with/without Otsu, value or `?`).
+- [x] **Generate the missing d6 PPM fixtures.** Done: converted 101/102/103/109/110 to
+      `P6` PPM under `app/src/test/resources/photos/` (native resolution; sources are all
+      ≤517px and the pipeline caps the longest edge at 512 without upscaling). The sweep
+      now covers them, surfacing the Otsu pass's plain-background wins (e.g. 102 `[]`→`[?, ?]`,
+      103 `[?, ?, ?]`→`[?, ?, ?, 1]`). Boxes stay `null` in `tests.txt`, so recall isn't
+      asserted on these hard/metallic cases — the sweep is for analysis only.
+- [ ] **Trim the OpenCV APK.** The bytedeco `opencv` artifact bundles every module
+      (~90 `.so`: dnn, video, stitching, face, …); the app only needs core/imgproc/
+      features2d, but the arm64 APK is ~138 MB. Exclude the unused module natives via the
+      `packaging { resources { excludes } }` block — carefully, since JavaCPP's `Loader`
+      preloads the dependency graph and dropping a needed lib breaks `features2d` loading.
 
 ## Future improvements (backlog)
 
