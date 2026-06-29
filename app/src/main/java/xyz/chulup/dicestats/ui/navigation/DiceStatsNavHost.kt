@@ -10,6 +10,7 @@ import androidx.navigation.navArgument
 import xyz.chulup.dicestats.feature.capture.CaptureScreen
 import xyz.chulup.dicestats.feature.detection.DetectionScreen
 import xyz.chulup.dicestats.feature.dicelist.DiceListScreen
+import xyz.chulup.dicestats.feature.games.GamesScreen
 import xyz.chulup.dicestats.feature.rolllog.RollLogScreen
 import xyz.chulup.dicestats.feature.stats.DieStatsScreen
 import xyz.chulup.dicestats.feature.stats.RollTotalsScreen
@@ -19,6 +20,7 @@ object Routes {
     const val CAPTURE = "capture"
     const val DICE_LIST = "dice_list"
     const val ROLL_TOTALS = "roll_totals"
+    const val GAMES = "games"
 
     const val DETECTION_ARG_PHOTO_PATH = "photoPath"
     const val DETECTION = "detection/{$DETECTION_ARG_PHOTO_PATH}"
@@ -46,10 +48,14 @@ fun DiceStatsNavHost() {
                 onBack = { navController.popBackStack() },
                 onDieSelected = { dieId -> navController.navigate(Routes.dieStats(dieId)) },
                 onRollTotals = { navController.navigate(Routes.ROLL_TOTALS) },
+                onGames = { navController.navigate(Routes.GAMES) },
             )
         }
         composable(Routes.ROLL_TOTALS) {
             RollTotalsScreen(onBack = { navController.popBackStack() })
+        }
+        composable(Routes.GAMES) {
+            GamesScreen(onBack = { navController.popBackStack() })
         }
         composable(
             route = Routes.DIE_STATS,

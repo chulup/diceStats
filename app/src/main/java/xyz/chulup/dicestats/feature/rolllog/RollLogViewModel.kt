@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import xyz.chulup.dicestats.data.DiceRepository
+import xyz.chulup.dicestats.data.db.GameEntity
 import xyz.chulup.dicestats.data.db.RollWithResults
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -20,6 +21,8 @@ import javax.inject.Inject
 data class RollLogUiState(
     val rolls: List<RollWithResults> = emptyList(),
     val selectedIds: Set<Long> = emptySet(),
+    val activeGame: GameEntity? = null,
+    val games: List<GameEntity> = emptyList(),
 ) {
     val inSelectionMode: Boolean get() = selectedIds.isNotEmpty()
 }
@@ -32,11 +35,40 @@ class RollLogViewModel @Inject constructor(
     private val selectedIds = MutableStateFlow<Set<Long>>(emptySet())
 
     val uiState: StateFlow<RollLogUiState> =
-        combine(repository.rolls, selectedIds) { rolls, selected ->
+        combine(
+            repository.rolls,
+            selectedIds,
+            repository.activeGame,
+            repository.games,
+        ) { rolls, selected, activeGame, games ->
             // Drop selection of rolls that no longer exist.
             val existing = rolls.mapTo(HashSet()) { it.roll.id }
-            RollLogUiState(rolls = rolls, selectedIds = selected intersect existing)
+            RollLogUiState(
+                rolls = rolls,
+                selectedIds = selected intersect existing,
+                activeGame = activeGame,
+                games = games,
+            )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), RollLogUiState())
+
+    fun startGame(name: String) {
+        val trimmed = name.trim()
+        if (trimmed.isEmpty()) return
+        viewModelScope.launch { repository.startGame(trimmed) }
+    }
+
+    fun finishGame() {
+        val id = uiState.value.activeGame?.id ?: return
+        viewModelScope.launch { repository.finishGame(id) }
+    }
+
+    /** Adds the currently selected rolls to [gameId] and exits selection mode. */
+    fun assignSelectedToGame(gameId: Long) {
+        val ids = selectedIds.value.toList()
+        if (ids.isEmpty()) return
+        selectedIds.value = emptySet()
+        viewModelScope.launch { repository.assignRollsToGame(ids, gameId) }
+    }
 
     fun toggleSelection(id: Long) {
         selectedIds.update { if (id in it) it - id else it + id }

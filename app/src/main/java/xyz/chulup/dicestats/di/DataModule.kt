@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.room.Room
 import xyz.chulup.dicestats.data.db.DiceDatabase
 import xyz.chulup.dicestats.data.db.DieDao
+import xyz.chulup.dicestats.data.db.GameDao
 import xyz.chulup.dicestats.data.db.RollDao
 import xyz.chulup.dicestats.data.photo.PhotoStorage
 import dagger.Module
@@ -21,7 +22,7 @@ object DataModule {
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): DiceDatabase =
         Room.databaseBuilder(context, DiceDatabase::class.java, "dicestats.db")
-            .addMigrations(DiceDatabase.MIGRATION_1_2)
+            .addMigrations(DiceDatabase.MIGRATION_1_2, DiceDatabase.MIGRATION_2_3)
             .build()
 
     @Provides
@@ -29,6 +30,9 @@ object DataModule {
 
     @Provides
     fun provideRollDao(db: DiceDatabase): RollDao = db.rollDao()
+
+    @Provides
+    fun provideGameDao(db: DiceDatabase): GameDao = db.gameDao()
 
     @Provides
     @Singleton

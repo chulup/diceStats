@@ -7,6 +7,12 @@
     <string name="roll_summary_with_sum">(Σ %1$d), %2$s</string>
     <string name="selection_clear">Clear selection</string>
     <string name="selection_delete">Delete selected</string>
+    <string name="selection_add_to_game">Add to game</string>
+    <string name="add_to_game_no_games">No games yet. Start one from the Stats page or the home banner first.</string>
+    <plurals name="add_to_game_prompt">
+        <item quantity="one">Add %1$d roll to:</item>
+        <item quantity="other">Add %1$d rolls to:</item>
+    </plurals>
     <plurals name="selection_count">
         <item quantity="one">%1$d selected</item>
         <item quantity="other">%1$d selected</item>
@@ -49,8 +55,24 @@
     <string name="stats_category_sum">Sum</string>
     <string name="stats_category_sum_desc">Roll total distribution</string>
     <string name="stats_category_games">Games</string>
-    <string name="stats_category_games_desc">Coming soon</string>
+    <string name="stats_category_games_desc">Per-session rolls</string>
     <string name="stats_section_dice">Individual dice</string>
+
+    <!-- Games (v2) -->
+    <string name="games_title">Games</string>
+    <string name="games_empty">No games yet. Start one to group rolls into a session.</string>
+    <string name="game_start">Start game</string>
+    <string name="game_finish">Finish</string>
+    <string name="game_open_badge">Open</string>
+    <string name="game_name_hint">Game name</string>
+    <string name="game_active_banner">%1$s · started %2$s</string>
+    <string name="game_started_at">Started %1$s</string>
+    <string name="game_ended_at">Ended %1$s</string>
+    <plurals name="game_roll_count">
+        <item quantity="zero">No rolls</item>
+        <item quantity="one">%1$d roll</item>
+        <item quantity="other">%1$d rolls</item>
+    </plurals>
     <string name="dice_list_empty">No dice registered yet. Save a roll to register one.</string>
     <plurals name="dice_list_roll_count">
         <item quantity="zero">No rolls</item>

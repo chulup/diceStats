@@ -1,17 +1,26 @@
 package xyz.chulup.dicestats.feature.rolllog
 
+import android.text.format.DateUtils
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -21,13 +30,17 @@ import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.SportsEsports
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -48,6 +61,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import xyz.chulup.dicestats.R
+import xyz.chulup.dicestats.data.db.GameEntity
 import xyz.chulup.dicestats.data.db.RollWithResults
 import java.io.File
 
@@ -60,6 +74,8 @@ fun RollLogScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var showDeleteDialog by remember { mutableStateOf(false) }
+    var showStartGameDialog by remember { mutableStateOf(false) }
+    var showAddToGameDialog by remember { mutableStateOf(false) }
 
     BackHandler(enabled = uiState.inSelectionMode) { viewModel.clearSelection() }
 
@@ -75,6 +91,9 @@ fun RollLogScreen(
                         }
                     },
                     actions = {
+                        IconButton(onClick = { showAddToGameDialog = true }) {
+                            Icon(Icons.Default.SportsEsports, contentDescription = stringResource(R.string.selection_add_to_game))
+                        }
                         IconButton(onClick = { showDeleteDialog = true }) {
                             Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.selection_delete))
                         }
@@ -101,36 +120,66 @@ fun RollLogScreen(
             }
         },
     ) { padding ->
-        if (uiState.rolls.isEmpty()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(stringResource(R.string.roll_log_empty))
+        Column(modifier = Modifier.fillMaxSize().padding(padding)) {
+            // Active-game banner / start control, hidden while selecting rolls.
+            if (!uiState.inSelectionMode) {
+                GameBanner(
+                    activeGame = uiState.activeGame,
+                    onStart = { showStartGameDialog = true },
+                    onFinish = { viewModel.finishGame() },
+                )
             }
-        } else {
-            LazyVerticalGrid(
-                columns = GridCells.Adaptive(120.dp),
-                contentPadding = PaddingValues(8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding),
-            ) {
-                items(uiState.rolls, key = { it.roll.id }) { roll ->
-                    val selected = roll.roll.id in uiState.selectedIds
-                    RollCell(
-                        roll = roll,
-                        selected = selected,
-                        onClick = { if (uiState.inSelectionMode) viewModel.toggleSelection(roll.roll.id) },
-                        onLongClick = { viewModel.toggleSelection(roll.roll.id) },
-                    )
+
+            if (uiState.rolls.isEmpty()) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(stringResource(R.string.roll_log_empty))
+                }
+            } else {
+                LazyVerticalGrid(
+                    columns = GridCells.Adaptive(120.dp),
+                    contentPadding = PaddingValues(8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxSize(),
+                ) {
+                    items(uiState.rolls, key = { it.roll.id }) { roll ->
+                        val selected = roll.roll.id in uiState.selectedIds
+                        RollCell(
+                            roll = roll,
+                            selected = selected,
+                            onClick = { if (uiState.inSelectionMode) viewModel.toggleSelection(roll.roll.id) },
+                            onLongClick = { viewModel.toggleSelection(roll.roll.id) },
+                        )
+                    }
                 }
             }
         }
+    }
+
+    if (showStartGameDialog) {
+        StartGameDialog(
+            onConfirm = { name ->
+                showStartGameDialog = false
+                viewModel.startGame(name)
+            },
+            onDismiss = { showStartGameDialog = false },
+        )
+    }
+
+    if (showAddToGameDialog) {
+        val count = uiState.selectedIds.size
+        AddToGameDialog(
+            games = uiState.games,
+            rollCount = count,
+            onPick = { gameId ->
+                showAddToGameDialog = false
+                viewModel.assignSelectedToGame(gameId)
+            },
+            onDismiss = { showAddToGameDialog = false },
+        )
     }
 
     if (showDeleteDialog) {
@@ -152,6 +201,133 @@ fun RollLogScreen(
             },
         )
     }
+}
+
+/** Shows the open game (with a Finish action) or a control to start one. */
+@Composable
+private fun GameBanner(
+    activeGame: GameEntity?,
+    onStart: () -> Unit,
+    onFinish: () -> Unit,
+) {
+    if (activeGame == null) {
+        TextButton(
+            onClick = onStart,
+            modifier = Modifier.padding(horizontal = 8.dp),
+        ) {
+            Icon(Icons.Default.SportsEsports, contentDescription = null)
+            Spacer(Modifier.width(8.dp))
+            Text(stringResource(R.string.game_start))
+        }
+        return
+    }
+
+    val started = remember(activeGame.startedAt) {
+        DateUtils.getRelativeTimeSpanString(activeGame.startedAt).toString()
+    }
+    Surface(
+        tonalElevation = 3.dp,
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
+        ) {
+            Icon(Icons.Default.SportsEsports, contentDescription = null)
+            Spacer(Modifier.width(12.dp))
+            Text(
+                text = stringResource(R.string.game_active_banner, activeGame.name, started),
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.weight(1f),
+            )
+            TextButton(onClick = onFinish) { Text(stringResource(R.string.game_finish)) }
+        }
+    }
+}
+
+/** Name-entry dialog for starting a new game. */
+@Composable
+private fun StartGameDialog(
+    onConfirm: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var name by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.game_start)) },
+        text = {
+            OutlinedTextField(
+                value = name,
+                onValueChange = { name = it },
+                singleLine = true,
+                label = { Text(stringResource(R.string.game_name_hint)) },
+            )
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onConfirm(name) },
+                enabled = name.isNotBlank(),
+            ) { Text(stringResource(R.string.game_start)) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.dialog_cancel)) }
+        },
+    )
+}
+
+/** Lets the user pick an existing game to add the selected rolls to. */
+@Composable
+private fun AddToGameDialog(
+    games: List<GameEntity>,
+    rollCount: Int,
+    onPick: (Long) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.selection_add_to_game)) },
+        text = {
+            if (games.isEmpty()) {
+                Text(stringResource(R.string.add_to_game_no_games))
+            } else {
+                Column(
+                    modifier = Modifier
+                        .heightIn(max = 320.dp)
+                        .verticalScroll(rememberScrollState()),
+                ) {
+                    Text(
+                        text = pluralStringResource(R.plurals.add_to_game_prompt, rollCount, rollCount),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(bottom = 8.dp),
+                    )
+                    games.forEach { game ->
+                        val started = remember(game.startedAt) {
+                            DateUtils.getRelativeTimeSpanString(game.startedAt).toString()
+                        }
+                        ListItem(
+                            headlineContent = { Text(game.name) },
+                            supportingContent = {
+                                Text(stringResource(R.string.game_started_at, started))
+                            },
+                            trailingContent = if (game.isActive) {
+                                { Text(stringResource(R.string.game_open_badge), color = MaterialTheme.colorScheme.primary) }
+                            } else null,
+                            modifier = Modifier.clickable { onPick(game.id) },
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.dialog_cancel)) }
+        },
+    )
 }
 
 @OptIn(ExperimentalFoundationApi::class)

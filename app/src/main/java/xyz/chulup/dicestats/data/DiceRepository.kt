@@ -5,6 +5,9 @@ import xyz.chulup.dicestats.data.db.DieDao
 import xyz.chulup.dicestats.data.db.DieEntity
 import xyz.chulup.dicestats.data.db.DieResultEntity
 import xyz.chulup.dicestats.data.db.DieRollCount
+import xyz.chulup.dicestats.data.db.GameDao
+import xyz.chulup.dicestats.data.db.GameEntity
+import xyz.chulup.dicestats.data.db.GameRollCount
 import xyz.chulup.dicestats.data.db.RollDao
 import xyz.chulup.dicestats.data.db.RollEntity
 import xyz.chulup.dicestats.data.db.RollWithResults
@@ -33,6 +36,7 @@ data class ConfirmedDie(
 class DiceRepository @Inject constructor(
     private val dieDao: DieDao,
     private val rollDao: RollDao,
+    private val gameDao: GameDao,
     private val photoStorage: PhotoStorage,
 ) {
     val dice: Flow<List<DieEntity>> = dieDao.observeAll()
@@ -40,6 +44,29 @@ class DiceRepository @Inject constructor(
 
     /** Number of recorded results per die, keyed by die id. */
     val rollCountsByDie: Flow<List<DieRollCount>> = dieDao.observeRollCounts()
+
+    /** All games, newest first. */
+    val games: Flow<List<GameEntity>> = gameDao.observeAll()
+
+    /** The currently open game (at most one), or null when none is running. */
+    val activeGame: Flow<GameEntity?> = gameDao.observeActive()
+
+    /** Number of rolls captured during each game, keyed by game id. */
+    val rollCountsByGame: Flow<List<GameRollCount>> = gameDao.observeRollCountsByGame()
+
+    /** Opens a new game; subsequent rolls are tagged to it until it is finished. */
+    suspend fun startGame(name: String): Long =
+        gameDao.insert(GameEntity(name = name, startedAt = System.currentTimeMillis()))
+
+    /** Closes a game; later rolls are no longer tagged to it. */
+    suspend fun finishGame(id: Long) =
+        gameDao.finish(id, System.currentTimeMillis())
+
+    /** Re-assigns existing rolls to [gameId] (e.g. from the gallery selection). */
+    suspend fun assignRollsToGame(rollIds: List<Long>, gameId: Long) {
+        if (rollIds.isEmpty()) return
+        rollDao.assignToGame(rollIds, gameId)
+    }
 
     fun die(dieId: Long): Flow<DieEntity?> = dieDao.observeById(dieId)
 
@@ -51,7 +78,11 @@ class DiceRepository @Inject constructor(
 
     /** Persists a roll and its per-die results; returns the new roll id. */
     suspend fun saveRoll(photoPath: String, capturedAt: Long, dice: List<ConfirmedDie>): Long {
-        val rollId = rollDao.insertRoll(RollEntity(photoPath = photoPath, capturedAt = capturedAt))
+        // Tag the roll to the open game, if any, so it counts toward that session.
+        val gameId = gameDao.activeGameId()
+        val rollId = rollDao.insertRoll(
+            RollEntity(photoPath = photoPath, capturedAt = capturedAt, gameId = gameId),
+        )
         rollDao.insertResults(
             dice.map { die ->
                 DieResultEntity(

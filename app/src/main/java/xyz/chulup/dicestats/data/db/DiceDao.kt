@@ -9,6 +9,9 @@ import kotlinx.coroutines.flow.Flow
 /** A registered die paired with how many recorded results reference it. */
 data class DieRollCount(val dieId: Long, val count: Int)
 
+/** A game paired with how many rolls were captured during it. */
+data class GameRollCount(val gameId: Long, val count: Int)
+
 @Dao
 interface DieDao {
     @Query("SELECT * FROM dice ORDER BY name")
@@ -50,4 +53,29 @@ interface RollDao {
 
     @Query("DELETE FROM rolls WHERE id IN (:ids)")
     suspend fun deleteRolls(ids: List<Long>)
+
+    @Query("UPDATE rolls SET gameId = :gameId WHERE id IN (:ids)")
+    suspend fun assignToGame(ids: List<Long>, gameId: Long?)
+}
+
+@Dao
+interface GameDao {
+    @Insert
+    suspend fun insert(game: GameEntity): Long
+
+    @Query("SELECT * FROM games ORDER BY startedAt DESC")
+    fun observeAll(): Flow<List<GameEntity>>
+
+    /** The single open game (most recent if data is ever inconsistent), or null. */
+    @Query("SELECT * FROM games WHERE endedAt IS NULL ORDER BY startedAt DESC LIMIT 1")
+    fun observeActive(): Flow<GameEntity?>
+
+    @Query("SELECT id FROM games WHERE endedAt IS NULL ORDER BY startedAt DESC LIMIT 1")
+    suspend fun activeGameId(): Long?
+
+    @Query("UPDATE games SET endedAt = :endedAt WHERE id = :id")
+    suspend fun finish(id: Long, endedAt: Long)
+
+    @Query("SELECT gameId AS gameId, COUNT(*) AS count FROM rolls WHERE gameId IS NOT NULL GROUP BY gameId")
+    fun observeRollCountsByGame(): Flow<List<GameRollCount>>
 }

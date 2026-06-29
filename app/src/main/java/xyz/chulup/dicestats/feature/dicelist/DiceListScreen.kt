@@ -37,6 +37,7 @@ fun DiceListScreen(
     onBack: () -> Unit,
     onDieSelected: (Long) -> Unit,
     onRollTotals: () -> Unit,
+    onGames: () -> Unit,
     viewModel: DiceListViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -67,12 +68,11 @@ fun DiceListScreen(
                 )
             }
             item {
-                // Placeholder for the future Games (v2) feature; not yet navigable.
                 CategoryRow(
                     icon = Icons.Default.SportsEsports,
                     title = stringResource(R.string.stats_category_games),
                     subtitle = stringResource(R.string.stats_category_games_desc),
-                    onClick = null,
+                    onClick = onGames,
                 )
             }
 
