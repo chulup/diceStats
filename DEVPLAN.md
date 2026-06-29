@@ -106,8 +106,11 @@ Unprioritized; capture now, schedule later.
 - **Read numbered & polyhedral dice (d6 with numerals, d8/d10/d20/d100).** The MVP
   reads pip d6 only; numbered faces and non-square polyhedra defeat both the
   square-shape detector and pip counting. Researched in [RESEARCH.md](RESEARCH.md):
-  add an **Otsu/brightness detection pass** for plain backgrounds (unioned via NMS,
-  triggered only when the scene is uncluttered), then **route by die type** to either
+  **Done — detection:** an **Otsu/brightness pass** now runs on plain backgrounds
+  (gated by edge density, unioned with the saturation boxes via NMS) in
+  `DiceDetectionPipeline`; on the reference photos it adds the previously-undetectable
+  metallic d6, d100, d8 and numbered d6 while leaving the cluttered originals (1–12)
+  unchanged. **Still to do:** **route by die type** to either
   pip counting (d6) or a **numeral reader** — a small offline TFLite digit CNN trained
   on synthetic die fonts (preferred), with bundled ML Kit OCR as a ship-now bridge.
   Value interpretation needs the die type (d10/d100 0-indexed faces). Ornate engraved

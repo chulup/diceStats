@@ -99,6 +99,41 @@ class DiceDetectionPipelineTest {
     }
 
     @Test
+    fun otsuPassDetectsUnsaturatedDieOnPlainBackground() {
+        val w = 200
+        val h = 200
+        // A desaturated (metallic/white-ish) die: the saturation pass is blind to it, but it
+        // stands out in luminance against a plain background, so the Otsu pass should find it.
+        val lightBg = argb(200, 200, 200)
+        val darkDie = argb(60, 60, 60)
+        val px = canvas(w, h, lightBg, listOf(intArrayOf(70, 70, 60)), darkDie)
+
+        // Saturation-only sees nothing (zero-saturation die on a zero-saturation background).
+        val satOnly = DiceDetectionPipeline.Params(otsuOnPlainBackground = false)
+        assertTrue(DiceDetectionPipeline.detect(px, w, h, satOnly).isEmpty())
+
+        // With the Otsu pass enabled (default), the die is detected.
+        val boxes = DiceDetectionPipeline.detect(px, w, h)
+        assertEquals(1, boxes.size)
+    }
+
+    @Test
+    fun otsuPassStaysOffOnTexturedBackground() {
+        val w = 200
+        val h = 200
+        // A fine per-pixel checkerboard makes the scene "cluttered" (edge density ~1), so the
+        // Otsu gate must stay closed — otherwise Otsu would flood textured photos with blobs.
+        val dark = argb(80, 80, 80)
+        val light = argb(180, 180, 180)
+        val px = IntArray(w * h) { if (((it % w) + (it / w)) % 2 == 0) dark else light }
+        // Lay a desaturated die on top; only the (gated-off) Otsu pass could ever see it.
+        for (y in 70 until 130) for (x in 70 until 130) px[y * w + x] = argb(120, 120, 120)
+
+        // Saturation is blind to it, and the texture keeps Otsu gated off → nothing detected.
+        assertTrue(DiceDetectionPipeline.detect(px, w, h).isEmpty())
+    }
+
+    @Test
     fun rejectsThinNonSquareStripe() {
         val w = 200
         val h = 200

@@ -12,6 +12,14 @@ import java.util.ArrayDeque
  * components, splits touching dice via a distance-transform watershed, and keeps
  * only die-shaped blobs.
  *
+ * On **plain backgrounds** (low edge density) it additionally runs an **Otsu
+ * brightness pass**: many dice are not saturated — metallic/white d6, and printed
+ * numerals on polyhedra fragment the saturation mask — but they do stand out in
+ * luminance against an uncluttered surface. The Otsu boxes are unioned with the
+ * saturation boxes (NMS-deduplicated). The pass is gated to plain scenes because on
+ * cluttered surfaces (wood grain, busy desks) Otsu floods with false positives; the
+ * saturation detector alone is clean there. See RESEARCH.md (detection, approach D4).
+ *
  * It takes a plain ARGB pixel array so it can be unit-tested on the JVM (fed by
  * `BufferedImage`) and reused on Android (fed by `Bitmap.getPixels`) with
  * identical behaviour.
@@ -49,6 +57,28 @@ internal object DiceDetectionPipeline {
         val minFill: Float = 0.6f,
         /** A blob is split where the distance transform exceeds this fraction of its max. */
         val seedFraction: Float = 0.55f,
+
+        // --- Otsu brightness pass (plain backgrounds only) ---
+        /** Enables the supplementary Otsu pass; false reproduces the saturation-only behaviour. */
+        val otsuOnPlainBackground: Boolean = true,
+        /** Sobel gradient magnitude (sum of |gx|+|gy| on 0..255 luma) that counts a pixel as an edge. */
+        val edgeMagnitudeThreshold: Int = 40,
+        /**
+         * The Otsu pass runs only when the fraction of edge pixels is below this. Cluttered
+         * surfaces (wood grain, busy desks) sit well above it and would flood Otsu with false
+         * positives; plain backgrounds sit well below. Calibrated on the reference photos: all
+         * cluttered originals are >= 0.186, the plain new dice <= 0.153.
+         */
+        val maxPlainEdgeDensity: Float = 0.15f,
+        // Otsu blobs are looser than saturated d6 faces: a die can fill much of a close-up
+        // frame, and polyhedra/rotated faces are less square.
+        val otsuMinAreaFraction: Float = 0.0015f,
+        val otsuMaxAreaFraction: Float = 0.45f,
+        val otsuMinAspect: Float = 0.4f,
+        val otsuMaxAspect: Float = 2.5f,
+        val otsuMinFill: Float = 0.45f,
+        /** Two boxes overlapping by more than this IoU are treated as the same die during the union. */
+        val nmsIouThreshold: Float = 0.3f,
     )
 
     /**
@@ -72,19 +102,65 @@ internal object DiceDetectionPipeline {
         morphClose(mask, w, h, params.closeRadius)
 
         val total = w * h
-        val minArea = (params.minAreaFraction * total).toInt().coerceAtLeast(1)
-        val maxArea = (params.maxAreaFraction * total).toInt()
+        val boxes = extractBoxes(
+            mask, w, h,
+            minArea = (params.minAreaFraction * total).toInt().coerceAtLeast(1),
+            maxArea = (params.maxAreaFraction * total).toInt(),
+            minAspect = params.minAspect,
+            maxAspect = params.maxAspect,
+            minFill = params.minFill,
+            seedFraction = params.seedFraction,
+        )
 
+        // Supplementary Otsu pass on plain backgrounds, unioned with the saturation boxes.
+        // Picks up dice the saturation mask misses (metallic/white, low-saturation numerals).
+        if (params.otsuOnPlainBackground) {
+            val gray = lumaArray(scaled.pixels)
+            if (edgeDensity(gray, w, h, params.edgeMagnitudeThreshold) < params.maxPlainEdgeDensity) {
+                val otsuMask = otsuMask(gray)
+                morphOpen(otsuMask, w, h, params.openRadius)
+                morphClose(otsuMask, w, h, params.closeRadius)
+                val otsuBoxes = extractBoxes(
+                    otsuMask, w, h,
+                    minArea = (params.otsuMinAreaFraction * total).toInt().coerceAtLeast(1),
+                    maxArea = (params.otsuMaxAreaFraction * total).toInt(),
+                    minAspect = params.otsuMinAspect,
+                    maxAspect = params.otsuMaxAspect,
+                    minFill = params.otsuMinFill,
+                    seedFraction = params.seedFraction,
+                )
+                // Keep every saturation box (no recall regression on plain scenes) and add
+                // only Otsu boxes that don't duplicate one already kept.
+                for (box in otsuBoxes) {
+                    if (boxes.none { iou(it, box) > params.nmsIouThreshold }) boxes.add(box)
+                }
+            }
+        }
+        return boxes
+    }
+
+    /** Labels [mask], splits touching blobs, and keeps die-shaped ones as normalized boxes. */
+    private fun extractBoxes(
+        mask: ByteArray,
+        w: Int,
+        h: Int,
+        minArea: Int,
+        maxArea: Int,
+        minAspect: Float,
+        maxAspect: Float,
+        minFill: Float,
+        seedFraction: Float,
+    ): ArrayList<BoundingBox> {
         val boxes = ArrayList<BoundingBox>()
         for (region in connectedComponents(mask, w, h, minArea)) {
-            for (blob in splitTouching(region, w, h, params.seedFraction)) {
+            for (blob in splitTouching(region, w, h, seedFraction)) {
                 val boxW = blob.right - blob.left
                 val boxH = blob.bottom - blob.top
                 if (blob.area < minArea || blob.area > maxArea) continue
                 val aspect = boxW.toFloat() / boxH.toFloat()
-                if (aspect < params.minAspect || aspect > params.maxAspect) continue
+                if (aspect < minAspect || aspect > maxAspect) continue
                 val fill = blob.area.toFloat() / (boxW.toFloat() * boxH.toFloat())
-                if (fill < params.minFill) continue
+                if (fill < minFill) continue
 
                 boxes.add(
                     BoundingBox(
@@ -97,6 +173,16 @@ internal object DiceDetectionPipeline {
             }
         }
         return boxes
+    }
+
+    private fun iou(a: BoundingBox, b: BoundingBox): Float {
+        val left = maxOf(a.left, b.left)
+        val top = maxOf(a.top, b.top)
+        val right = minOf(a.right, b.right)
+        val bottom = minOf(a.bottom, b.bottom)
+        if (right <= left || bottom <= top) return 0f
+        val inter = (right - left) * (bottom - top)
+        return inter / (a.width * a.height + b.width * b.height - inter)
     }
 
     private class Scaled(val pixels: IntArray, val width: Int, val height: Int)
@@ -169,6 +255,82 @@ internal object DiceDetectionPipeline {
             val min = minOf(r, g, b)
             val sat = if (max == 0) 0 else (max - min) * 255 / max
             if (sat >= minSat && max >= minVal) mask[i] = 1
+        }
+        return mask
+    }
+
+    /** Per-pixel ITU-R BT.601 luma (0..255). */
+    private fun lumaArray(pixels: IntArray): IntArray {
+        val gray = IntArray(pixels.size)
+        for (i in pixels.indices) {
+            val p = pixels[i]
+            val r = (p shr 16) and 0xFF
+            val g = (p shr 8) and 0xFF
+            val b = p and 0xFF
+            gray[i] = (r * 299 + g * 587 + b * 114) / 1000
+        }
+        return gray
+    }
+
+    /**
+     * Fraction of interior pixels whose Sobel gradient magnitude (|gx|+|gy|) clears
+     * [threshold] — a cheap clutter estimate. Plain backgrounds score low; textured
+     * surfaces (wood grain, busy desks) score high.
+     */
+    private fun edgeDensity(gray: IntArray, w: Int, h: Int, threshold: Int): Float {
+        if (w < 3 || h < 3) return 0f
+        var edges = 0
+        for (y in 1 until h - 1) {
+            for (x in 1 until w - 1) {
+                val gx = -gray[(y - 1) * w + x - 1] - 2 * gray[y * w + x - 1] - gray[(y + 1) * w + x - 1] +
+                    gray[(y - 1) * w + x + 1] + 2 * gray[y * w + x + 1] + gray[(y + 1) * w + x + 1]
+                val gy = -gray[(y - 1) * w + x - 1] - 2 * gray[(y - 1) * w + x] - gray[(y - 1) * w + x + 1] +
+                    gray[(y + 1) * w + x - 1] + 2 * gray[(y + 1) * w + x] + gray[(y + 1) * w + x + 1]
+                if (kotlin.math.abs(gx) + kotlin.math.abs(gy) >= threshold) edges++
+            }
+        }
+        return edges.toFloat() / ((w - 2) * (h - 2))
+    }
+
+    /**
+     * Binarizes [gray] at the Otsu threshold (the level maximizing between-class
+     * variance) with the **minority** brightness class as foreground — a die printed
+     * dark-on-light or light-on-dark is the smaller class against a plain surface.
+     */
+    private fun otsuMask(gray: IntArray): ByteArray {
+        val hist = IntArray(256)
+        for (g in gray) hist[g]++
+        val total = gray.size
+
+        var sumAll = 0L
+        for (t in 0 until 256) sumAll += t.toLong() * hist[t]
+        var sumB = 0L
+        var wB = 0
+        var maxVar = -1.0
+        var thr = 0
+        for (t in 0 until 256) {
+            wB += hist[t]
+            if (wB == 0) continue
+            val wF = total - wB
+            if (wF == 0) break
+            sumB += t.toLong() * hist[t]
+            val mB = sumB.toDouble() / wB
+            val mF = (sumAll - sumB).toDouble() / wF
+            val between = wB.toDouble() * wF * (mB - mF) * (mB - mF)
+            if (between > maxVar) {
+                maxVar = between
+                thr = t
+            }
+        }
+
+        var below = 0
+        for (t in 0..thr) below += hist[t]
+        val foregroundIsDark = below <= total - below
+
+        val mask = ByteArray(gray.size)
+        for (i in gray.indices) {
+            val isDark = gray[i] <= thr
+            if (isDark == foregroundIsDark) mask[i] = 1
         }
         return mask
     }
