@@ -1,97 +1,24 @@
 # DiceStats — Development Plan
 
-Incremental MVP build. Each step is independently runnable and builds on the last.
-See [DESIGN.md](DESIGN.md) for the full architecture this works toward.
+Active and upcoming work. Completed steps live in [CHANGELOG.md](CHANGELOG.md);
+see [DESIGN.md](DESIGN.md) for the full architecture this works toward.
 
-> **Module note:** DESIGN.md targets a multi-module layout. Early steps use a single
-> `:app` module to avoid premature structure; we split into `:core:*` / `:feature:*` /
-> `:recognition` modules once there's enough code to justify it (around step 3–4).
+## Immediate tasks
 
-## Step 1 — Photo capture & storage (most basic MVP)
+Focused on evaluating and tuning the Otsu detection pass (see
+[RESEARCH.md](RESEARCH.md) / `DiceDetectionPipeline`).
 
-**Goal:** Launch the app, take a photo, store it in a dedicated on-device directory,
-and list captured photos.
-
-- [x] Project scaffold: Gradle (Kotlin DSL + version catalog), `:app` module, manifest.
-- [x] Compose + Material3 theme, single-activity, Navigation.
-- [x] `CAMERA` runtime permission handling.
-- [x] Capture screen: CameraX preview + shutter → save JPEG.
-- [x] `PhotoStorage`: writes to `getExternalFilesDir(null)/rolls`.
-- [x] Roll log screen: list stored photos (newest first), FAB → capture.
-
-**Done when:** a photo taken in-app appears in the roll log and persists in the
-`rolls/` directory across app restarts.
-
-## Step 2 — Die detection
-
-**Goal:** Find each d6 in a captured photo.
-
-- [x] `:recognition` interface: `DieDetector.detect(image) → List<BoundingBox>`.
-- [x] Detect dice — spike chose classical CV (HSV saturation/value segmentation, in
-      pure Kotlin so it stays JVM-unit-testable).
-- [x] Overlay detected bounding boxes on the photo for visual confirmation.
-
-**Done when:** the app draws a box around each die in a captured photo. ✓
-
-## Step 3 — Pip counting
-
-**Goal:** Read the value of each detected die.
-
-- [x] OpenCV pip/blob counting on each die crop → value 1–6 (`PipCounter`,
-      SimpleBlobDetector, both polarities).
-- [x] Produce `DetectedDie(value, boundingBox)` per die (`DieRecognizer`).
-      Confidence is currently binary — value is `null` when pips are unreadable;
-      a numeric `valueConfidence` 0..1 is deferred.
-- [x] Show the recognized value next to each box; unreadable faces flagged amber "?".
-
-**Done when:** each detected die shows a 1–6 value. ✓ (numeric confidence deferred)
-
-## Step 4 — Die database & store rolls
-
-**Goal:** Persist recognized rolls with user confirmation.
-
-- [x] Room DB: `Die`, `Roll`, `DieResult` (nullable forward FKs per DESIGN.md).
-- [x] Wire Hilt for DI.
-- [x] Confirm screen: per detected die, edit value + assign to a `Die`
-      (pick from list / register new).
-- [x] Persist `Roll` + `DieResult`s; roll log reads from DB.
-
-**Done when:** a confirmed capture is saved to the DB and survives restart, with
-each die assigned and its value recorded. ✓
-
-## Step 5 — Per-die statistics
-
-**Goal:** Surface the recorded data as per-die fairness stats.
-
-- [x] Dice list screen (registered dice + roll counts), reachable from the roll log.
-- [x] `DieStatistics` (pure Kotlin): 1–6 distribution, total, mean, chi-square +
-      p-value (regularized incomplete gamma), fairness verdict.
-- [x] Die stats screen: distribution bar chart, summary (rolls/mean/expected),
-      fairness card ("looks fair / possibly biased / not enough rolls").
-
-**Done when:** tapping a registered die shows its face distribution and a
-fairness indicator. ✓
-
-## Step 6 — Automatic dice identification
-
-**Goal:** Guess which registered die each detected face is, so the confirm screen
-pre-fills the assignment instead of requiring it every time.
-
-- [x] Colour fingerprint (`DieColorSignature`, `ColorFingerprintPipeline`):
-      saturation-weighted hue + lightness per face, pips/highlights excluded.
-- [x] Auto-learn: each saved roll folds the crop's colour into the die's running
-      fingerprint (`dice.colorSignature`/`colorSamples`, DB v2 + migration).
-- [x] Match on capture (`DieIdentifier`): confident guesses pre-fill the die;
-      unsure ones fall back to manual tap-to-identify.
-
-**Done when:** a die confirmed once is auto-assigned on later captures. ✓
-Thresholds (`MATCH_MAX_DISTANCE`, `IDENTITY_CONFIRM_THRESHOLD`) are starting
-hypotheses still to calibrate against real labelled rolls.
-
----
-
-After step 5 the MVP is feature-complete. v2/v3 features (Games, Die Groups,
-Players) follow per DESIGN.md.
+- [ ] **Incorporate OpenCV into unit tests on the dev machine.** The app's OpenCV
+      dependency is an Android AAR (native libs are NDK-only) and `PipCounter` is tied
+      to `android.graphics.Bitmap`, so pip counting can't run in JVM tests today. Add a
+      desktop OpenCV build for tests and decouple the counting core from `Bitmap` so
+      values can be read off-device.
+- [ ] **Add a dev overlay on the detection screen.** On top of the photo: an otsu
+      on/off control, and the dice found **with** Otsu vs **without** it (each labelled
+      with its value, or `?` when undetermined). Log that information together with the
+      file name for later analysis.
+- [ ] **Test against all d6-only photos in `./photos`** (aside from disabled ones), and
+      log the same information (dice found with/without Otsu, value or `?`).
 
 ## Future improvements (backlog)
 

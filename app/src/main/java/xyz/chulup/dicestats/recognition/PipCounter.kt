@@ -1,15 +1,13 @@
 package xyz.chulup.dicestats.recognition
 
 import android.graphics.Bitmap
-import org.opencv.android.Utils
-import org.opencv.core.KeyPoint
-import org.opencv.core.Mat
-import org.opencv.core.MatOfKeyPoint
-import org.opencv.core.Rect
-import org.opencv.core.Size
-import org.opencv.features2d.SimpleBlobDetector
-import org.opencv.features2d.SimpleBlobDetector_Params
-import org.opencv.imgproc.Imgproc
+import org.bytedeco.opencv.global.opencv_core
+import org.bytedeco.opencv.global.opencv_imgproc
+import org.bytedeco.opencv.opencv_core.KeyPointVector
+import org.bytedeco.opencv.opencv_core.Mat
+import org.bytedeco.opencv.opencv_core.Rect
+import org.bytedeco.opencv.opencv_core.Size
+import org.bytedeco.opencv.opencv_features2d.SimpleBlobDetector
 
 /**
  * Counts the pips on a detected die face using OpenCV blob detection
@@ -19,7 +17,10 @@ import org.opencv.imgproc.Imgproc
  * red dice, dark pips on yellow dice), so we detect both dark and light blobs and
  * merge them. Counting on the full-resolution crop keeps small pips sharp.
  *
- * Requires OpenCV to be initialized (see `DiceStatsApp`).
+ * OpenCV is the bytedeco/JavaCPP build, whose natives load both on Android and on the
+ * desktop JVM — so the [Mat]-based [count] core is shared by the on-device [Bitmap]
+ * path and JVM unit tests. The native library is loaded in `DiceStatsApp` (device) /
+ * the test's `@BeforeClass` (JVM) via `Loader.load`.
  */
 class PipCounter {
 
@@ -28,10 +29,25 @@ class PipCounter {
      *   range (unreadable face, or a non-die region with no pips).
      */
     fun count(bitmap: Bitmap, box: BoundingBox): Int? {
-        val rgba = Mat()
-        Utils.bitmapToMat(bitmap, rgba)
-        val w = bitmap.width
-        val h = bitmap.height
+        // Copy the bitmap's pixels straight into the Mat's buffer: ARGB_8888 is stored
+        // R,G,B,A in memory, matching CV_8UC4, so Bitmap's own copyPixelsToBuffer suffices.
+        val rgba = Mat(bitmap.height, bitmap.width, opencv_core.CV_8UC4)
+        bitmap.copyPixelsToBuffer(rgba.data().capacity(bitmap.byteCount.toLong()).asByteBuffer())
+        return try {
+            count(rgba, box)
+        } finally {
+            rgba.release()
+        }
+    }
+
+    /**
+     * Pip-counting core on an RGBA [rgba] Mat (4-channel, R,G,B,A). Carries no Android
+     * types, so it runs in JVM unit tests fed a Mat built from raw pixels — the same path
+     * the [Bitmap] overload takes on-device.
+     */
+    fun count(rgba: Mat, box: BoundingBox): Int? {
+        val w = rgba.cols()
+        val h = rgba.rows()
 
         val left = (box.left * w).toInt().coerceIn(0, w - 1)
         val top = (box.top * h).toInt().coerceIn(0, h - 1)
@@ -44,16 +60,15 @@ class PipCounter {
         // regardless of how near/far the die was — fixed blob-area params then work
         // for both close-up and far-away dice.
         val canonical = Mat()
-        val scale = CANONICAL_EDGE / maxOf(rect.width, rect.height).toDouble()
-        Imgproc.resize(crop, canonical, Size(), scale, scale, Imgproc.INTER_CUBIC)
+        val scale = CANONICAL_EDGE / maxOf(rect.width(), rect.height()).toDouble()
+        opencv_imgproc.resize(crop, canonical, Size(), scale, scale, opencv_imgproc.INTER_CUBIC)
 
         val gray = Mat()
-        Imgproc.cvtColor(canonical, gray, Imgproc.COLOR_RGBA2GRAY)
+        opencv_imgproc.cvtColor(canonical, gray, opencv_imgproc.COLOR_RGBA2GRAY)
 
         val cropArea = (canonical.rows() * canonical.cols()).toDouble()
         val count = countBlobs(gray, cropArea)
 
-        rgba.release()
         crop.release()
         canonical.release()
         gray.release()
@@ -61,40 +76,50 @@ class PipCounter {
         return if (count in MIN_PIPS..MAX_PIPS) count else null
     }
 
+    /** A merged pip keypoint: center x/y and diameter, in canonical-crop pixels. */
+    private class Pip(val x: Float, val y: Float, val size: Float)
+
     private fun countBlobs(gray: Mat, cropArea: Double): Int {
-        val merged = ArrayList<KeyPoint>()
+        val merged = ArrayList<Pip>()
         for (blobColor in intArrayOf(DARK, LIGHT)) {
             val detector = SimpleBlobDetector.create(paramsFor(blobColor, cropArea))
-            val keypoints = MatOfKeyPoint()
+            val keypoints = KeyPointVector()
             detector.detect(gray, keypoints)
-            for (kp in keypoints.toArray()) {
+            var i = 0L
+            while (i < keypoints.size()) {
+                val kp = keypoints.get(i)
+                val x = kp.pt().x()
+                val y = kp.pt().y()
+                val size = kp.size()
                 // De-duplicate blobs found by both polarities.
                 val isNew = merged.none { existing ->
-                    val dx = existing.pt.x - kp.pt.x
-                    val dy = existing.pt.y - kp.pt.y
-                    val r = DEDUP_FACTOR * kp.size
+                    val dx = existing.x - x
+                    val dy = existing.y - y
+                    val r = DEDUP_FACTOR.toFloat() * size
                     dx * dx + dy * dy <= r * r
                 }
-                if (isNew) merged.add(kp)
+                if (isNew) merged.add(Pip(x, y, size))
+                i++
             }
-            keypoints.release()
+            keypoints.close()
+            detector.close()
         }
         return merged.size
     }
 
-    private fun paramsFor(blobColor: Int, cropArea: Double): SimpleBlobDetector_Params =
-        SimpleBlobDetector_Params().apply {
-            set_filterByColor(true)
-            set_blobColor(blobColor.toByte())
-            set_filterByArea(true)
-            set_minArea((cropArea * MIN_PIP_AREA_FRACTION).toFloat())
-            set_maxArea((cropArea * MAX_PIP_AREA_FRACTION).toFloat())
-            set_filterByCircularity(true)
-            set_minCircularity(0.6f)
-            set_filterByConvexity(true)
-            set_minConvexity(0.7f)
-            set_filterByInertia(true)
-            set_minInertiaRatio(0.4f)
+    private fun paramsFor(blobColor: Int, cropArea: Double): SimpleBlobDetector.Params =
+        SimpleBlobDetector.Params().apply {
+            filterByColor(true)
+            blobColor(blobColor.toByte())
+            filterByArea(true)
+            minArea((cropArea * MIN_PIP_AREA_FRACTION).toFloat())
+            maxArea((cropArea * MAX_PIP_AREA_FRACTION).toFloat())
+            filterByCircularity(true)
+            minCircularity(0.6f)
+            filterByConvexity(true)
+            minConvexity(0.7f)
+            filterByInertia(true)
+            minInertiaRatio(0.4f)
         }
 
     private companion object {

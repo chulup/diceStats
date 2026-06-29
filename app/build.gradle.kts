@@ -44,17 +44,44 @@ android {
     }
     buildToolsVersion = "36.1.0"
 
-    // OpenCV bundles native libs for every ABI, so a single APK is ~160 MB. Split
-    // per ABI so each APK only carries the libs it needs (~40 MB).
+    testOptions {
+        unitTests.all {
+            // Surface the recognition sweep's per-photo log (println) in test output.
+            it.testLogging { showStandardStreams = true }
+        }
+    }
+
+    packaging {
+        resources {
+            // Each bytedeco native jar (opencv/openblas/javacpp) carries identical GraalVM
+            // native-image config (unused on Android) and a copy of the javacpp helper lib;
+            // drop the former and keep one of the latter to avoid merge conflicts.
+            excludes += "/META-INF/native-image/**"
+            pickFirsts += "/org/bytedeco/**"
+        }
+    }
+
+    // OpenCV (bytedeco/JavaCPP) bundles large native libs; keep the per-ABI split so the APK
+    // carries only one architecture's libs. bytedeco ships arm64-v8a natives only (see above).
     splits {
         abi {
             isEnable = true
             reset()
-            include("arm64-v8a", "armeabi-v7a", "x86", "x86_64")
+            include("arm64-v8a")
             isUniversalApk = false
         }
     }
 }
+
+// bytedeco/JavaCPP native artifacts (carry a per-platform classifier, so they're declared
+// here rather than in the version catalog) and the Android ABIs the app ships.
+val bytedecoNatives = listOf(
+    "opencv" to libs.versions.bytedecoOpencv.get(),
+    "javacpp" to libs.versions.javacpp.get(),
+    "openblas" to libs.versions.bytedecoOpenblas.get(),
+)
+// bytedeco 4.13.0-1.5.13 ships only 64-bit Android natives; we target arm64-v8a devices.
+val androidAbis = listOf("android-arm64")
 
 dependencies {
     implementation(libs.androidx.core.ktx)
@@ -80,7 +107,14 @@ dependencies {
 
     implementation(libs.kotlinx.coroutines.android)
 
-    implementation(libs.opencv)
+    // OpenCV (bytedeco/JavaCPP): Java API + per-ABI Android natives. The opencv artifact
+    // pulls javacpp + openblas (Java) transitively; their native jars are added per ABI
+    // (version-catalog entries can't carry a classifier). The matching desktop natives for
+    // JVM unit tests are added as testRuntimeOnly below.
+    implementation(libs.bytedeco.opencv)
+    bytedecoNatives.forEach { (lib, version) ->
+        androidAbis.forEach { abi -> implementation("org.bytedeco:$lib:$version:$abi") }
+    }
 
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
@@ -92,6 +126,11 @@ dependencies {
 
     testImplementation(libs.junit)
     testImplementation(libs.gson)
+    // Desktop (linux-x86_64) OpenCV natives so the recognition sweep runs the real PipCounter
+    // (pip counting) in JVM unit tests on the dev machine.
+    bytedecoNatives.forEach { (lib, version) ->
+        testRuntimeOnly("org.bytedeco:$lib:$version:linux-x86_64")
+    }
 
     androidTestImplementation(libs.androidx.test.junit)
     androidTestImplementation(libs.androidx.test.runner)

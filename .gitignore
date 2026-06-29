@@ -1,4 +1,7 @@
-/photos/
+# Reference photos are local-only (large/private), but the ground-truth tests.txt is
+# tracked — PhotoDetectionTest reads it as the canonical recognition ground truth.
+/photos/*
+!/photos/tests.txt
 
 # Built application files
 *.apk

@@ -11,7 +11,12 @@ coil = "2.7.0"
 kotlinxCoroutines = "1.9.0"
 junit = "4.13.2"
 gson = "2.11.0"
-opencv = "4.13.0"
+# OpenCV via bytedeco/JavaCPP (org.bytedeco). One artifact family with prebuilt natives
+# for both Android ABIs and the desktop (linux-x86_64), so pip counting runs on-device AND
+# in JVM unit tests on the dev machine. javacpp/openblas are its native runtime deps.
+bytedecoOpencv = "4.13.0-1.5.13"
+javacpp = "1.5.13"
+bytedecoOpenblas = "0.3.31-1.5.13"
 androidxTestJunit = "1.2.1"
 androidxTestRunner = "1.6.2"
 ksp = "2.2.10-2.0.2"
@@ -41,7 +46,7 @@ coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coi
 kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "kotlinxCoroutines" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 gson = { group = "com.google.code.gson", name = "gson", version.ref = "gson" }
-opencv = { group = "org.opencv", name = "opencv", version.ref = "opencv" }
+bytedeco-opencv = { group = "org.bytedeco", name = "opencv", version.ref = "bytedecoOpencv" }
 androidx-test-junit = { group = "androidx.test.ext", name = "junit", version.ref = "androidxTestJunit" }
 androidx-test-runner = { group = "androidx.test", name = "runner", version.ref = "androidxTestRunner" }
 hilt-android = { group = "com.google.dagger", name = "hilt-android", version.ref = "hilt" }

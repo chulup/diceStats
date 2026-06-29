@@ -5,7 +5,8 @@ Guidance for Claude Code when working in this Android project.
 ## Docs / file map
 
 - [DESIGN.md](DESIGN.md) — architecture, data model, screens, scope/roadmap (MVP→v2→v3).
-- [DEVPLAN.md](DEVPLAN.md) — incremental build steps (1–6 done) + future-improvements backlog.
+- [DEVPLAN.md](DEVPLAN.md) — immediate tasks + future-improvements backlog.
+- [CHANGELOG.md](CHANGELOG.md) — completed work (MVP steps 1–6).
 - [RESEARCH.md](RESEARCH.md) — recognition research (see below).
 - `app/src/main/java/xyz/chulup/dicestats/` — source, package-by-feature
   (`feature/*`, `data/*`, `recognition/*`, `ui/*`, `di/*`).
@@ -44,13 +45,21 @@ Ornate engraved dice (photo 109) deferred. All recognition stays **offline on-de
 ./gradlew assembleDebug        # build debug APK
 ./gradlew installDebug         # build + install on connected device/emulator
 ./scripts/build-install.sh     # build + install on the remote-ADB device (picks the matching ABI split)
+./scripts/run-unit-tests.sh    # JVM unit tests (sets the SDK PATH); passes args through to Gradle
+./scripts/android-test.sh      # build + install + run instrumented tests on the remote-ADB device
 ./gradlew test                 # JVM unit tests
 ./gradlew connectedAndroidTest # instrumented tests (needs device/emulator)
 ./gradlew lint                 # Android lint
 ./gradlew ktlintCheck          # style (if configured)
 ```
 
-Run a single test: `./gradlew test --tests "com.example.MyClassTest"`
+Run a single unit test: `./scripts/run-unit-tests.sh --tests "xyz.chulup.dicestats.MyClassTest"`
+Run one instrumented test class: `./scripts/android-test.sh xyz.chulup.dicestats.recognition.PipRecognitionTest`
+
+**OpenCV note:** OpenCV is the bytedeco/JavaCPP build (`org.bytedeco:opencv`), one artifact
+family with natives for both Android (`android-arm64`) and the desktop (`linux-x86_64`), so
+pip counting runs on-device *and* in JVM unit tests. The desktop build links `opencv_highgui`
+against GTK2, so JVM tests need it once: `sudo apt-get install -y libgtk2.0-0`.
 
 ## Environment & Device Access
 
@@ -66,10 +75,12 @@ This runs in WSL2; the Android SDK tools and ADB server live on the Windows host
   ```
   Then `adb devices` should list the connected device.
 
-- **Instrumented tests against the remote device** — `./gradlew connectedAndroidTest`
-  hangs in this setup: Gradle's DDMLIB only talks to `127.0.0.1:5037` and can't use
-  the remote ADB server ("Cannot reach ADB server"). Build the APKs and drive the
-  instrumentation through the `adb` CLI instead (it honors `ADB_SERVER_SOCKET`):
+- **Instrumented tests against the remote device** — use `./scripts/android-test.sh`
+  (optionally a test class as `$1`). `./gradlew connectedAndroidTest` hangs in this
+  setup: Gradle's DDMLIB only talks to `127.0.0.1:5037` and can't use the remote ADB
+  server ("Cannot reach ADB server"). The script builds the APKs and drives the
+  instrumentation through the `adb` CLI instead (it honors `ADB_SERVER_SOCKET`), which
+  is equivalent to:
   ```bash
   ./gradlew assembleDebug assembleDebugAndroidTest
   adb install -r app/build/outputs/apk/debug/app-arm64-v8a-debug.apk

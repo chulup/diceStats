@@ -5,12 +5,13 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.google.gson.Gson
 import kotlinx.coroutines.runBlocking
+import org.bytedeco.javacpp.Loader
+import org.bytedeco.opencv.global.opencv_core
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
-import org.opencv.android.OpenCVLoader
 
 /**
  * On-device end-to-end recognition test: runs [DieRecognizer] (saturation
@@ -39,7 +40,9 @@ class PipRecognitionTest {
 
     @Before
     fun setUp() {
-        assertTrue("OpenCV failed to initialize", OpenCVLoader.initLocal())
+        val ctx = InstrumentationRegistry.getInstrumentation().targetContext
+        System.setProperty("org.bytedeco.javacpp.cachedir", ctx.cacheDir.absolutePath)
+        Loader.load(opencv_core::class.java)
     }
 
     @Test

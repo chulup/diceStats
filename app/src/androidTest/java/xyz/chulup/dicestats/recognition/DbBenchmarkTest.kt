@@ -9,7 +9,8 @@ import kotlinx.coroutines.runBlocking
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
-import org.opencv.android.OpenCVLoader
+import org.bytedeco.javacpp.Loader
+import org.bytedeco.opencv.global.opencv_core
 
 /**
  * On-device benchmark over the device-captured roll dataset (`assets/dbphotos/`),
@@ -41,7 +42,9 @@ class DbBenchmarkTest {
 
     @Before
     fun setUp() {
-        check(OpenCVLoader.initLocal()) { "OpenCV failed to initialize" }
+        val ctx = InstrumentationRegistry.getInstrumentation().targetContext
+        System.setProperty("org.bytedeco.javacpp.cachedir", ctx.cacheDir.absolutePath)
+        Loader.load(opencv_core::class.java)
     }
 
     @Test
