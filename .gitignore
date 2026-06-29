@@ -71,3 +71,6 @@ __pycache__/
 
 # Local prototyping scratch output
 scratch_*/
+
+# Raw on-device data pull (DB + full-res roll JPEGs); benchmark fixtures live in androidTest/assets/dbphotos
+/device-pull/
