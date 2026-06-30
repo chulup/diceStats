@@ -43,26 +43,42 @@ Unprioritized; capture now, schedule later.
   background modeling, or an edge/shape cue alongside colour.
 - **Read numbered & polyhedral dice (d6 with numerals, d8/d10/d20/d100).** The MVP
   reads pip d6 only; numbered faces and non-square polyhedra defeat both the
-  square-shape detector and pip counting. Researched in [RESEARCH.md](RESEARCH.md):
-  **Done — detection:** an **Otsu/brightness pass** now runs on plain backgrounds
-  (gated by edge density, unioned with the saturation boxes via NMS) in
-  `DiceDetectionPipeline`; on the reference photos it adds the previously-undetectable
-  metallic d6, d100, d8 and numbered d6 while leaving the cluttered originals (1–12)
-  unchanged. **Still to do:** **route by die type** to either
-  pip counting (d6) or a **numeral reader** — a small offline TFLite digit CNN trained
-  on synthetic die fonts (preferred), with bundled ML Kit OCR as a ship-now bridge.
-  Value interpretation needs the die type (d10/d100 0-indexed faces). Ornate engraved
-  dice (test photo 109) are out of scope for now.
-  **Done — stats layer:** `data/DieType.kt` models d6/d8/d10/d20/d100 (face values,
-  expected mean, histogram step, `isValidValue`/`faceIndex`). `DieStatistics` and
-  `RollTotalStatistics` are die-type-aware (default d6), and
-  `DieStatsViewModel`/`buildGameStatsUiState` resolve each die's type from
-  `DieEntity.faces`. **Done — sanitization:** external data is filtered against the die
-  type at its boundary — `DiceRepository` (`sanitizeRolls`, `valuesForDie`) drops stored
-  values that aren't a face of their die, and `DetectionViewModel` validates user input
-  against the assigned die's type; impossible values are ignored everywhere, never
-  clamped. **Still to do (data model):** let the user pick a die's type on registration
-  and persist it (the roll-totals screen still assumes d6, since a roll can mix types).
+  square-shape detector and pip counting. Researched in [RESEARCH.md](RESEARCH.md).
+
+  **Done so far:**
+  - **Detection** — an **Otsu/brightness pass** runs on plain backgrounds (gated by edge
+    density, unioned with the saturation boxes via NMS) in `DiceDetectionPipeline`; on the
+    reference photos it adds the previously-undetectable metallic d6, d100, d8 and numbered
+    d6 while leaving the cluttered originals (1–12) unchanged.
+  - **Stats layer** — `data/DieType.kt` models d6/d8/d10/d20/d100 (face values, expected
+    mean, histogram step, `isValidValue`/`faceIndex`). `DieStatistics` and
+    `RollTotalStatistics` are die-type-aware (default d6); `DieStatsViewModel` and
+    `buildGameStatsUiState` resolve each die's type from `DieEntity.faces`.
+  - **Sanitization** — external data is filtered against the die type at its boundary:
+    `DiceRepository` (`sanitizeRolls`, `valuesForDie`) drops stored values that aren't a
+    face of their die (results from a deleted die are kept), and `DetectionViewModel`
+    validates user input against the assigned die's type. Impossible values are ignored
+    everywhere, never clamped.
+
+  **Remaining tasks:**
+  - [ ] **Die-type registration + persistence.** Let the user choose a die's type when
+    registering it (and editing it), and persist it via `DieEntity.faces` (already a
+    column, currently always 6). Until this lands every die resolves to d6, so the
+    type-aware stats/sanitization above only exercise the d6 path in practice.
+  - [ ] **Route recognition by die type.** After detection, route each crop to pip
+    counting (d6) or a **numeral reader** for numbered/polyhedral faces. Value
+    interpretation needs the die type (d10/d100 0-indexed faces).
+  - [ ] **Numeral reader.** A small offline TFLite digit CNN trained on synthetic die
+    fonts (preferred), with bundled ML Kit OCR as a ship-now bridge.
+  - [ ] **Type-aware value entry on the confirm screen.** The value steppers assume a d6
+    (1..6, step 1) and default an unread die to 1; generalise to the assigned die's range
+    and step (d100 is 0..90 step 10, so 1 isn't even a valid face) and default to a real
+    face. Needed before non-d6 dice can actually be confirmed/saved.
+  - [ ] **Heterogeneous roll totals.** The roll-totals screen (and a game's totals) assume
+    every die in a roll is the same type (d6). A roll can mix types, so the total range,
+    spacing, and expected mean need to combine per-die types rather than one `DieType`.
+  - [ ] Ornate engraved dice (test photo 109) stay out of scope — likely needs the per-die
+    multi-face registration approach below.
 - **Per-die multi-face registration → template / subimage matching (future).** When a
   user registers an *unusual* die, optionally have them photograph **every face**.
   Recognition then becomes per-die **pattern matching / subimage search** — match a
