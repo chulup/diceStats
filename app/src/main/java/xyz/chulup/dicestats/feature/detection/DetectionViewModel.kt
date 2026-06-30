@@ -12,6 +12,7 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import xyz.chulup.dicestats.data.ConfirmedDie
 import xyz.chulup.dicestats.data.DiceRepository
+import xyz.chulup.dicestats.data.DieType
 import xyz.chulup.dicestats.data.db.DieEntity
 import xyz.chulup.dicestats.recognition.BoundingBox
 import xyz.chulup.dicestats.recognition.DieColorAnalyzer
@@ -50,6 +51,10 @@ data class DieAssignment(
     val hasValue: Boolean get() = recognizedValue != null || edited
 }
 
+/** The type of the registered die this assignment points at, or null if unassigned/unknown. */
+private fun DieAssignment.dieTypeIn(registered: List<DieEntity>): DieType? =
+    dieId?.let { id -> registered.firstOrNull { it.id == id } }?.let { DieType.fromFaces(it.faces) }
+
 sealed interface DetectionUiState {
     data object Loading : DetectionUiState
 
@@ -66,9 +71,9 @@ sealed interface DetectionUiState {
         /** True while re-detection on a cropped region is running. */
         val detecting: Boolean = false,
     ) : DetectionUiState {
-        /** Every die must be assigned and have a valid value before saving (DESIGN.md). */
+        /** Every die must be assigned and have a value that's a real face of it (DESIGN.md). */
         val canSave: Boolean
-            get() = dice.isNotEmpty() && dice.all { it.dieId != null && it.value in 1..6 }
+            get() = dice.isNotEmpty() && dice.all { it.dieTypeIn(registeredDice)?.isValidValue(it.value) == true }
 
         /** Registered dice ordered most-recent-first — the tap-to-identify palette. */
         val recentDice: List<DieEntity>
@@ -218,8 +223,20 @@ class DetectionViewModel @Inject constructor(
                 ?.let { DieIdentifier.Candidate(d.id, it) }
         }
 
-    fun setValue(index: Int, value: Int) =
-        updateDie(index) { it.copy(value = value.coerceIn(MIN_VALUE, MAX_VALUE), edited = true) }
+    /** Sets a die's value, clamped to the assigned die's possible range (d6 until assigned). */
+    fun setValue(index: Int, value: Int) {
+        _uiState.update { state ->
+            if (state !is DetectionUiState.Ready) return@update state
+            val die = state.dice.getOrNull(index) ?: return@update state
+            val type = die.dieTypeIn(state.registeredDice) ?: DieType.DEFAULT
+            val clamped = value.coerceIn(type.minValue, type.maxValue)
+            state.copy(
+                dice = state.dice.mapIndexed { i, d ->
+                    if (i == index) d.copy(value = clamped, edited = true) else d
+                },
+            )
+        }
+    }
 
     /** Drops a detected die the user judges to be a false positive. */
     fun removeDie(index: Int) {
@@ -438,8 +455,6 @@ class DetectionViewModel @Inject constructor(
         const val ARG_PHOTO_PATH = "photoPath"
         private const val TARGET_MAX_EDGE = 1280
         private const val REGION_TARGET_MAX_EDGE = 1280
-        private const val MIN_VALUE = 1
-        private const val MAX_VALUE = 6
         private const val DEFAULT_VALUE = 1
     }
 }

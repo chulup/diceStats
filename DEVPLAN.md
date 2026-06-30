@@ -53,6 +53,16 @@ Unprioritized; capture now, schedule later.
   on synthetic die fonts (preferred), with bundled ML Kit OCR as a ship-now bridge.
   Value interpretation needs the die type (d10/d100 0-indexed faces). Ornate engraved
   dice (test photo 109) are out of scope for now.
+  **Done — stats layer:** `data/DieType.kt` models d6/d8/d10/d20/d100 (face values,
+  expected mean, histogram step, `isValidValue`/`faceIndex`). `DieStatistics` and
+  `RollTotalStatistics` are die-type-aware (default d6), and
+  `DieStatsViewModel`/`buildGameStatsUiState` resolve each die's type from
+  `DieEntity.faces`. **Done — sanitization:** external data is filtered against the die
+  type at its boundary — `DiceRepository` (`sanitizeRolls`, `valuesForDie`) drops stored
+  values that aren't a face of their die, and `DetectionViewModel` validates user input
+  against the assigned die's type; impossible values are ignored everywhere, never
+  clamped. **Still to do (data model):** let the user pick a die's type on registration
+  and persist it (the roll-totals screen still assumes d6, since a roll can mix types).
 - **Per-die multi-face registration → template / subimage matching (future).** When a
   user registers an *unusual* die, optionally have them photograph **every face**.
   Recognition then becomes per-die **pattern matching / subimage search** — match a

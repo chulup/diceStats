@@ -16,6 +16,7 @@ import xyz.chulup.dicestats.recognition.BoundingBox
 import xyz.chulup.dicestats.recognition.DieColorSignature
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.withContext
 import java.io.File
 import javax.inject.Inject
@@ -40,7 +41,10 @@ class DiceRepository @Inject constructor(
     private val photoStorage: PhotoStorage,
 ) {
     val dice: Flow<List<DieEntity>> = dieDao.observeAll()
-    val rolls: Flow<List<RollWithResults>> = rollDao.observeRollsWithResults()
+
+    /** Rolls with their per-die results; values impossible for their die are dropped. */
+    val rolls: Flow<List<RollWithResults>> =
+        combine(rollDao.observeRollsWithResults(), dice) { rolls, dice -> sanitizeRolls(rolls, dice) }
 
     /** Number of recorded results per die, keyed by die id. */
     val rollCountsByDie: Flow<List<DieRollCount>> = dieDao.observeRollCounts()
@@ -54,9 +58,12 @@ class DiceRepository @Inject constructor(
     /** A single game by id (for the per-game stats screen). */
     fun game(gameId: Long): Flow<GameEntity?> = gameDao.observeById(gameId)
 
-    /** The rolls (with their per-die results) captured during a game, newest first. */
+    /** The rolls (with their per-die results) captured during a game, newest first;
+     *  values impossible for their die are dropped. */
     fun rollsForGame(gameId: Long): Flow<List<RollWithResults>> =
-        rollDao.observeRollsWithResultsForGame(gameId)
+        combine(rollDao.observeRollsWithResultsForGame(gameId), dice) { rolls, dice ->
+            sanitizeRolls(rolls, dice)
+        }
 
     /** Number of rolls captured during each game, keyed by game id. */
     val rollCountsByGame: Flow<List<GameRollCount>> = gameDao.observeRollCountsByGame()
@@ -77,8 +84,12 @@ class DiceRepository @Inject constructor(
 
     fun die(dieId: Long): Flow<DieEntity?> = dieDao.observeById(dieId)
 
-    /** All recorded face values for a die (for statistics). */
-    fun valuesForDie(dieId: Long): Flow<List<Int>> = dieDao.observeValuesForDie(dieId)
+    /** All recorded face values for a die (for statistics), with impossible values dropped. */
+    fun valuesForDie(dieId: Long): Flow<List<Int>> =
+        combine(dieDao.observeById(dieId), dieDao.observeValuesForDie(dieId)) { die, values ->
+            val type = DieType.fromFaces(die?.faces ?: DieType.DEFAULT.faces)
+            values.filter { type.isValidValue(it) }
+        }
 
     suspend fun registerDie(name: String): Long =
         dieDao.insert(DieEntity(name = name, createdAt = System.currentTimeMillis()))
@@ -137,3 +148,23 @@ class DiceRepository @Inject constructor(
 }
 
 private fun BoundingBox.encode(): String = "$left,$top,$right,$bottom"
+
+/**
+ * Drops every result whose recorded value isn't a possible face of its die, so the rest of
+ * the app never sees impossible data. A result whose die is unknown — deleted (null
+ * `dieId`) or simply absent from [dice] — is kept, since there's no die type to judge it
+ * against. Rolls with no surviving results stay (empty) and are filtered later by the stats.
+ */
+internal fun sanitizeRolls(
+    rolls: List<RollWithResults>,
+    dice: List<DieEntity>,
+): List<RollWithResults> {
+    val typeByDie = dice.associate { it.id to DieType.fromFaces(it.faces) }
+    return rolls.map { rwr ->
+        val kept = rwr.results.filter { result ->
+            val type = result.dieId?.let { typeByDie[it] } ?: return@filter true
+            type.isValidValue(result.value)
+        }
+        if (kept.size == rwr.results.size) rwr else rwr.copy(results = kept)
+    }
+}

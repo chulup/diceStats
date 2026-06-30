@@ -38,7 +38,7 @@ internal fun RollTotalsCard(group: RollTotalGroup) {
             )
             Spacer(Modifier.height(12.dp))
             StatsBarChart(
-                labels = (group.minTotal..group.maxTotal).map { it.toString() },
+                labels = group.totals.map { it.toString() },
                 counts = group.counts,
                 maxCount = group.maxCount,
             )

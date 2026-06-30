@@ -100,7 +100,7 @@ private fun SummaryRow(stats: DieStatistics) {
         )
         SummaryStat(
             label = stringResource(R.string.die_stats_expected_mean),
-            value = String.format("%.2f", DieStatistics.EXPECTED_MEAN),
+            value = String.format("%.2f", stats.expectedMean),
             modifier = Modifier.weight(1f),
         )
     }
@@ -131,7 +131,7 @@ private fun DistributionChart(stats: DieStatistics) {
             )
             Spacer(Modifier.height(12.dp))
             StatsBarChart(
-                labels = (1..stats.counts.size).map { it.toString() },
+                labels = stats.dieType.faceValues.map { it.toString() },
                 counts = stats.counts,
                 maxCount = stats.maxCount,
                 barSpacing = 8.dp,

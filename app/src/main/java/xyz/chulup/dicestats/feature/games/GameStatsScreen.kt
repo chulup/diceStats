@@ -34,7 +34,6 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import xyz.chulup.dicestats.R
-import xyz.chulup.dicestats.feature.stats.DieStatistics
 import xyz.chulup.dicestats.feature.stats.RollTotalsCard
 import xyz.chulup.dicestats.feature.stats.StatsBarChart
 import xyz.chulup.dicestats.feature.stats.fairnessVerdictStyle
@@ -138,14 +137,14 @@ private fun DiePerformanceCard(performance: DiePerformance) {
                     "  ·  " + stringResource(
                         R.string.roll_totals_mean,
                         String.format("%.1f", stats.mean),
-                        String.format("%.1f", DieStatistics.EXPECTED_MEAN),
+                        String.format("%.1f", stats.expectedMean),
                     ),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(Modifier.height(12.dp))
             StatsBarChart(
-                labels = (1..DieStatistics.FACES).map { it.toString() },
+                labels = stats.dieType.faceValues.map { it.toString() },
                 counts = stats.counts,
                 maxCount = stats.maxCount,
             )

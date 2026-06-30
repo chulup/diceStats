@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import xyz.chulup.dicestats.data.DiceRepository
+import xyz.chulup.dicestats.data.DieType
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -28,7 +29,8 @@ class DieStatsViewModel @Inject constructor(
 
     val uiState: StateFlow<DieStatsUiState> =
         combine(repository.die(dieId), repository.valuesForDie(dieId)) { die, values ->
-            DieStatsUiState(dieName = die?.name, stats = DieStatistics.from(values))
+            val dieType = die?.let { DieType.fromFaces(it.faces) } ?: DieType.DEFAULT
+            DieStatsUiState(dieName = die?.name, stats = DieStatistics.from(values, dieType))
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), DieStatsUiState())
 
     companion object {

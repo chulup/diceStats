@@ -1,5 +1,6 @@
 package xyz.chulup.dicestats.feature.games
 
+import xyz.chulup.dicestats.data.DieType
 import xyz.chulup.dicestats.data.db.DieEntity
 import xyz.chulup.dicestats.data.db.RollWithResults
 import xyz.chulup.dicestats.feature.stats.DieStatistics
@@ -39,7 +40,7 @@ fun buildGameStatsUiState(
 ): GameStatsUiState {
     val totals = RollTotalStatistics.from(rolls.map { rwr -> rwr.results.map { it.value } })
 
-    val namesById = dice.associate { it.id to it.name }
+    val diceById = dice.associateBy { it.id }
     // Group every result's face value by its die; the TreeMap keeps dice ordered by id.
     val valuesByDie = TreeMap<Long, MutableList<Int>>()
     for (roll in rolls) {
@@ -50,8 +51,8 @@ fun buildGameStatsUiState(
     }
     val perDie = valuesByDie.entries
         .mapNotNull { (dieId, values) ->
-            val name = namesById[dieId] ?: return@mapNotNull null
-            DiePerformance(dieId, name, DieStatistics.from(values))
+            val die = diceById[dieId] ?: return@mapNotNull null
+            DiePerformance(dieId, die.name, DieStatistics.from(values, DieType.fromFaces(die.faces)))
         }
 
     return GameStatsUiState(

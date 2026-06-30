@@ -1,5 +1,6 @@
 package xyz.chulup.dicestats.feature.stats
 
+import xyz.chulup.dicestats.data.DieType
 import kotlin.math.exp
 import kotlin.math.ln
 
@@ -14,61 +15,64 @@ enum class FairnessVerdict {
 /**
  * Per-die statistics over recorded face values (DESIGN.md "Statistics").
  *
- * Pure Kotlin so it stays JVM-unit-testable. [counts] is indexed by face-1
- * (index 0 = face "1" … index 5 = face "6").
+ * Pure Kotlin so it stays JVM-unit-testable. [counts] is indexed by face position
+ * within [dieType] (index 0 = the lowest face, e.g. "1" on a d6 or "0" on a d100).
  */
 data class DieStatistics(
     val total: Int,
     val counts: List<Int>,
     val mean: Double,
-    /** Chi-square statistic for a uniform-distribution null hypothesis (df = 5). */
+    /** Chi-square statistic for a uniform-distribution null hypothesis (df = sides − 1). */
     val chiSquare: Double,
     /** P-value of [chiSquare]; null when [total] is too small for a verdict. */
     val pValue: Double?,
     val verdict: FairnessVerdict,
+    /** The kind of die these statistics describe; drives the face values and expected mean. */
+    val dieType: DieType = DieType.DEFAULT,
 ) {
     /** Largest face count, for scaling a bar chart (at least 1 to avoid divide-by-zero). */
     val maxCount: Int get() = counts.maxOrNull()?.coerceAtLeast(1) ?: 1
 
+    /** Expected uniform mean for a fair die of this [dieType]. */
+    val expectedMean: Double get() = dieType.expectedMean
+
     companion object {
-        const val FACES = 6
-
-        /** Expected uniform mean of a d6: (1+2+…+6)/6. */
-        const val EXPECTED_MEAN = 3.5
-
         /** Rule of thumb: chi-square needs an expected count of ~5 per cell to be valid. */
         const val MIN_EXPECTED_PER_FACE = 5.0
 
         /** Reject fairness below this p-value (standard 5% significance level). */
         const val SIGNIFICANCE = 0.05
 
-        /** Builds statistics from raw recorded values (each expected in 1..[FACES]). */
-        fun from(values: List<Int>): DieStatistics {
-            val counts = IntArray(FACES)
+        /**
+         * Builds statistics from raw recorded values for a [dieType] (d6 by default).
+         * Values that aren't a face of the die (e.g. a 7 on a d6) are ignored.
+         */
+        fun from(values: List<Int>, dieType: DieType = DieType.DEFAULT): DieStatistics {
+            val sides = dieType.sides
+            val counts = IntArray(sides)
             var sum = 0
             var total = 0
             for (v in values) {
-                if (v in 1..FACES) {
-                    counts[v - 1]++
-                    sum += v
-                    total++
-                }
+                val index = dieType.faceIndex(v) ?: continue
+                counts[index]++
+                sum += v
+                total++
             }
 
             val mean = if (total == 0) 0.0 else sum.toDouble() / total
-            val expected = total.toDouble() / FACES
+            val expected = total.toDouble() / sides
             val chiSquare = if (total == 0) 0.0 else
                 counts.sumOf { c -> val d = c - expected; d * d / expected }
 
             val enoughData = expected >= MIN_EXPECTED_PER_FACE
-            val pValue = if (enoughData) chiSquarePValue(chiSquare, df = FACES - 1) else null
+            val pValue = if (enoughData) chiSquarePValue(chiSquare, df = sides - 1) else null
             val verdict = when {
                 !enoughData -> FairnessVerdict.INSUFFICIENT_DATA
                 pValue!! < SIGNIFICANCE -> FairnessVerdict.POSSIBLY_BIASED
                 else -> FairnessVerdict.LOOKS_FAIR
             }
 
-            return DieStatistics(total, counts.toList(), mean, chiSquare, pValue, verdict)
+            return DieStatistics(total, counts.toList(), mean, chiSquare, pValue, verdict, dieType)
         }
 
         /**

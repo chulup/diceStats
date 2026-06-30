@@ -3,6 +3,7 @@ package xyz.chulup.dicestats.feature.stats
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import xyz.chulup.dicestats.data.DieType
 
 class DieStatisticsTest {
 
@@ -65,5 +66,30 @@ class DieStatisticsTest {
         val s = DieStatistics.from(listOf(0, 7, 3, -1, 4))
         assertEquals(2, s.total)
         assertEquals(listOf(0, 0, 1, 1, 0, 0), s.counts)
+    }
+
+    @Test
+    fun d20_uniform_looksFairWithTwentyFaceCounts() {
+        // 5 of each face -> expected per face 5 (the minimum), chi-square 0.
+        val values = (1..20).flatMap { face -> List(5) { face } }
+        val s = DieStatistics.from(values, DieType.D20)
+        assertEquals(20, s.counts.size)
+        assertEquals(100, s.total)
+        assertEquals(10.5, s.expectedMean, 1e-9)
+        assertEquals(0.0, s.chiSquare, 1e-9)
+        assertEquals(FairnessVerdict.LOOKS_FAIR, s.verdict)
+        assertEquals(DieType.D20, s.dieType)
+    }
+
+    @Test
+    fun d100_countsByFace_andIgnoresNonFaceValues() {
+        // Faces step by ten; 5 and 100 aren't faces and must be ignored.
+        val s = DieStatistics.from(listOf(0, 50, 50, 90, 5, 100), DieType.D100)
+        assertEquals(10, s.counts.size)
+        assertEquals(4, s.total)
+        assertEquals(1, s.counts[0]) // value 0
+        assertEquals(2, s.counts[5]) // value 50
+        assertEquals(1, s.counts[9]) // value 90
+        assertEquals(45.0, s.expectedMean, 1e-9)
     }
 }
