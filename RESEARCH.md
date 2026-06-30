@@ -178,3 +178,40 @@ Saved artifacts from the investigations (prototype outputs, not production code)
 For polyhedral dice, **which face is "the value"?** Photo 107: `tests.txt` says **8** (the
 large front face) while the apex reads "20". Detection crops, the reader, and labels must
 all target the same face consistently before training a model.
+
+## Detection + recognition sweep — white-pass A/B (2026-06-30)
+
+Ran the full pipeline (`DiceDetectionPipeline.detect` → `PipCounter.count`) over every
+fixtured, non-disabled photo in `photos/tests.txt` — **23 photos, 41 ground-truth dice** —
+twice: the current build (`whitePass = true`) and the pre-fix pipeline (`whitePass = false`,
+which is byte-identical to the code before the white/bright pass since the pass is fully
+gated by that flag). Otsu stays on in both.
+
+Metrics: *found-something recall* = photos with ≥1 GT die where ≥1 box was proposed;
+*boxed-GT recall* = GT dice carrying a ground-truth box (the 1–12 set) covered at IoU ≥ 0.5;
+*value-match* = read pip values matched against GT values as a multiset, over all GT dice;
+*proposed/readable* = total proposed boxes and how many pip-read to a number (vs `?`).
+
+| Metric | white pass ON (current) | OFF (pre-fix) |
+| --- | --- | --- |
+| Found-something recall | **20/21 (95%)** | 11/21 (52%) |
+| Boxed-GT IoU ≥ 0.5 recall (1–12) | 14/14 (100%) | 14/14 (100%) |
+| Value-match recall | **20/41 (49%)** | 10/41 (24%) |
+| Proposed boxes | 73 | 22 |
+| Readable (non-`?`) | 34 | 16 |
+
+Findings:
+- **Detection nearly doubled** (52% → 95% of dice-bearing photos detect something). The 9
+  newly-covered photos are the 7 white-d6 captures (201–207) plus 109 and 110 — all
+  previously invisible to the saturation + Otsu passes.
+- **Correct value reads doubled** (24% → 49% of all dice).
+- **No regression** on the precise-box reference set (1–12): boxed-GT IoU recall stays 100%.
+- **Cost:** proposals jumped 22 → 73 — the white pass over-proposes on wood grain. The
+  surplus pip-reads as `?` and is pruned downstream by pip-counting / the user (recall is
+  what the pipeline optimises; precision is recovered later). Only **101** (metallic d6)
+  remains a total miss.
+
+Reproduce / re-run: `DetectionStatsReport` (JVM test) sweeps the `tests.txt` fixtures with
+`PipCounter` and prints these aggregates. It's the standing benchmark for evaluating any
+detection/recognition change — edit its `configs` list to A/B a new `Params` against the
+current default.
