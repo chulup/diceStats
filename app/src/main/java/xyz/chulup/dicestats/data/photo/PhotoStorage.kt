@@ -3,6 +3,9 @@ package xyz.chulup.dicestats.data.photo
 import android.content.Context
 import android.graphics.Bitmap
 import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 /**
  * Stores roll photos in a dedicated, app-specific on-device directory
@@ -25,7 +28,10 @@ class PhotoStorage(context: Context) {
         }
 
     /** A new, not-yet-written file for the next capture. */
-    fun newPhotoFile(): File = File(rollsDir, "roll_${System.currentTimeMillis()}.jpg")
+    fun newPhotoFile(): File {
+        val stamp = uniqueStamp(rollsDir, "roll_", listOf("jpg"))
+        return File(rollsDir, "roll_$stamp.jpg")
+    }
 
     /** Compresses [bitmap] to a new JPEG in the rolls dir and returns it. */
     fun writePhoto(bitmap: Bitmap): File {
@@ -39,7 +45,9 @@ class PhotoStorage(context: Context) {
      * reports dir alongside a sibling `.json` holding [metadataJson]. Returns the copy.
      */
     fun saveReport(source: File, metadataJson: String): File {
-        val stamp = System.currentTimeMillis()
+        // The jpg and its sibling json must share one stamp; guard against an
+        // existing pair so neither half clobbers a prior report.
+        val stamp = uniqueStamp(reportsDir, "unrecognized_", listOf("jpg", "json"))
         val photo = File(reportsDir, "unrecognized_$stamp.jpg")
         source.copyTo(photo, overwrite = true)
         File(reportsDir, "unrecognized_$stamp.json").writeText(metadataJson)
@@ -61,8 +69,25 @@ class PhotoStorage(context: Context) {
         }
     }
 
+    /**
+     * Returns a `YYYY-MM-dd_HH:mm:ss` stamp for [prefix]-named files in [dir] that is
+     * free of collisions across every extension in [extensions]: second-precision stamps
+     * are not unique, so if any sibling already exists a `_2`, `_3`, … suffix is appended.
+     */
+    private fun uniqueStamp(dir: File, prefix: String, extensions: List<String>): String {
+        val base = formatStamp(Date())
+        if (extensions.none { File(dir, "$prefix$base.$it").exists() }) return base
+        var n = 2
+        while (extensions.any { File(dir, "$prefix${base}_$n.$it").exists() }) n++
+        return "${base}_$n"
+    }
+
     private companion object {
         const val DIR_NAME = "rolls"
         const val REPORTS_DIR_NAME = "unrecognized"
     }
 }
+
+/** Formats [date] as a `YYYY-MM-dd_HH:mm:ss` filename stamp (local time, fixed Locale). */
+internal fun formatStamp(date: Date): String =
+    SimpleDateFormat("yyyy-MM-dd_HH:mm:ss", Locale.US).format(date)
