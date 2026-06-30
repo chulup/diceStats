@@ -81,18 +81,17 @@ Unprioritized; capture now, schedule later.
   once (aggregate + per-die breakdown within the game).
 
 ### Refactor
-The per-game stats screen (`GameStatsScreen`) currently copy-pastes UI from the
-existing stats screens. The shared chart palette has already been extracted to
-`feature/stats/StatsColors.kt`; the remaining duplication to consolidate:
-- **Shared bar renderer.** `GameStatsScreen.Bar`/`BarChart`,
-  `DieStatsScreen.FaceBar`, and `RollTotalsScreen.TotalBar` are near-identical bar
-  renderers (same `Column`/`Box`/`fillMaxHeight(fraction.coerceAtLeast(...))`
-  geometry, differing only in label type and the `count > 0` guard). Extract one
-  reusable `Bar`/`BarChart` and have all three screens use it.
-- **Shared roll-totals card.** `GameStatsScreen.TotalsCard` duplicates
-  `RollTotalsScreen.GroupCard` (same dice-count title, roll-count·mean line, and
-  per-`RollTotalGroup` bar chart). Extract a single reusable card.
-- **Shared fairness verdict mapping.** The `FairnessVerdict → (Color, String)`
-  `when` mapping is copy-pasted between `GameStatsScreen.DiePerformanceCard` and
-  `DieStatsScreen.FairnessCard`. Extract a shared helper returning the colour and
-  label for a verdict.
+The per-game stats screen (`GameStatsScreen`) used to copy-paste UI from the
+existing stats screens. The shared chart palette lives in
+`feature/stats/StatsColors.kt`; the remaining duplication has now been consolidated:
+- [x] **Shared bar renderer.** Extracted `StatsBarChart`/`StatsBar` to
+  `feature/stats/StatsChart.kt` (label list + `count > 0` guard / zero-count display
+  parameterised); `GameStatsScreen`, `DieStatsScreen`, and `RollTotalsScreen` all use
+  it. (The per-game charts now use the standard 180.dp height, up from 160.dp.)
+- [x] **Shared roll-totals card.** Extracted `RollTotalsCard`
+  (`feature/stats/RollTotalsCard.kt`), used by both `RollTotalsScreen` and
+  `GameStatsScreen`'s totals section.
+- [x] **Shared fairness verdict mapping.** Extracted `fairnessVerdictStyle`
+  (`feature/stats/FairnessVerdictStyle.kt`) returning the `(Color, String)` for a
+  `FairnessVerdict`; used by `GameStatsScreen.DiePerformanceCard` and
+  `DieStatsScreen.FairnessCard`.

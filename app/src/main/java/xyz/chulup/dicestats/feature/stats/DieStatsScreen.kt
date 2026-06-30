@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -131,64 +130,21 @@ private fun DistributionChart(stats: DieStatistics) {
                 style = MaterialTheme.typography.titleMedium,
             )
             Spacer(Modifier.height(12.dp))
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(180.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.Bottom,
-            ) {
-                stats.counts.forEachIndexed { index, count ->
-                    FaceBar(
-                        face = index + 1,
-                        count = count,
-                        fraction = count.toFloat() / stats.maxCount,
-                        modifier = Modifier.weight(1f),
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun FaceBar(face: Int, count: Int, fraction: Float, modifier: Modifier = Modifier) {
-    Column(
-        modifier = modifier.fillMaxHeight(),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Bottom,
-    ) {
-        Text(count.toString(), style = MaterialTheme.typography.labelSmall)
-        Spacer(Modifier.height(2.dp))
-        // Reserve the column height so bars share a common baseline; the bar fills
-        // the fraction of the available track above the face label.
-        Box(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth(),
-            contentAlignment = Alignment.BottomCenter,
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .fillMaxHeight(fraction.coerceAtLeast(if (count > 0) 0.02f else 0f))
-                    .clip(RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp))
-                    .background(statsBarColor),
+            StatsBarChart(
+                labels = (1..stats.counts.size).map { it.toString() },
+                counts = stats.counts,
+                maxCount = stats.maxCount,
+                barSpacing = 8.dp,
+                showZeroCount = true,
+                labelStyle = MaterialTheme.typography.labelMedium,
             )
         }
-        Spacer(Modifier.height(4.dp))
-        Text(face.toString(), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
     }
 }
 
 @Composable
 private fun FairnessCard(stats: DieStatistics) {
-    val (color, headline) = when (stats.verdict) {
-        FairnessVerdict.LOOKS_FAIR -> statsFairColor to stringResource(R.string.die_stats_fair)
-        FairnessVerdict.POSSIBLY_BIASED -> statsBiasedColor to stringResource(R.string.die_stats_biased)
-        FairnessVerdict.INSUFFICIENT_DATA ->
-            MaterialTheme.colorScheme.onSurfaceVariant to stringResource(R.string.die_stats_insufficient)
-    }
+    val (color, headline) = fairnessVerdictStyle(stats.verdict)
     Card {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {

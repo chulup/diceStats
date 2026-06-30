@@ -6,9 +6,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -32,17 +30,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import xyz.chulup.dicestats.R
 import xyz.chulup.dicestats.feature.stats.DieStatistics
-import xyz.chulup.dicestats.feature.stats.FairnessVerdict
-import xyz.chulup.dicestats.feature.stats.RollTotalGroup
-import xyz.chulup.dicestats.feature.stats.statsBarColor
-import xyz.chulup.dicestats.feature.stats.statsBiasedColor
-import xyz.chulup.dicestats.feature.stats.statsFairColor
+import xyz.chulup.dicestats.feature.stats.RollTotalsCard
+import xyz.chulup.dicestats.feature.stats.StatsBarChart
+import xyz.chulup.dicestats.feature.stats.fairnessVerdictStyle
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -91,7 +86,7 @@ fun GameStatsScreen(
             )
 
             SectionHeader(stringResource(R.string.game_stats_section_totals))
-            uiState.totals.forEach { group -> TotalsCard(group) }
+            uiState.totals.forEach { group -> RollTotalsCard(group) }
 
             SectionHeader(stringResource(R.string.game_stats_section_dice))
             if (uiState.dice.isEmpty()) {
@@ -117,42 +112,9 @@ private fun SectionHeader(text: String) {
 }
 
 @Composable
-private fun TotalsCard(group: RollTotalGroup) {
-    Card {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text(
-                pluralStringResource(R.plurals.roll_totals_dice_count, group.diceCount, group.diceCount),
-                style = MaterialTheme.typography.titleMedium,
-            )
-            Text(
-                pluralStringResource(R.plurals.dice_list_roll_count, group.rollCount, group.rollCount) +
-                    "  ·  " + stringResource(
-                        R.string.roll_totals_mean,
-                        String.format("%.1f", group.mean),
-                        String.format("%.1f", group.expectedMean),
-                    ),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Spacer(Modifier.height(12.dp))
-            BarChart(
-                labels = (group.minTotal..group.maxTotal).map { it.toString() },
-                counts = group.counts,
-                maxCount = group.maxCount,
-            )
-        }
-    }
-}
-
-@Composable
 private fun DiePerformanceCard(performance: DiePerformance) {
     val stats = performance.stats
-    val (color, verdict) = when (stats.verdict) {
-        FairnessVerdict.LOOKS_FAIR -> statsFairColor to stringResource(R.string.die_stats_fair)
-        FairnessVerdict.POSSIBLY_BIASED -> statsBiasedColor to stringResource(R.string.die_stats_biased)
-        FairnessVerdict.INSUFFICIENT_DATA ->
-            MaterialTheme.colorScheme.onSurfaceVariant to stringResource(R.string.die_stats_insufficient)
-    }
+    val (color, verdict) = fairnessVerdictStyle(stats.verdict)
     Card {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -182,62 +144,11 @@ private fun DiePerformanceCard(performance: DiePerformance) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(Modifier.height(12.dp))
-            BarChart(
+            StatsBarChart(
                 labels = (1..DieStatistics.FACES).map { it.toString() },
                 counts = stats.counts,
                 maxCount = stats.maxCount,
             )
         }
-    }
-}
-
-/** A column-of-bars chart: one bar per [labels]/[counts] entry, scaled to [maxCount]. */
-@Composable
-private fun BarChart(labels: List<String>, counts: List<Int>, maxCount: Int) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(160.dp),
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-        verticalAlignment = Alignment.Bottom,
-    ) {
-        counts.forEachIndexed { index, count ->
-            Bar(
-                label = labels.getOrElse(index) { "" },
-                count = count,
-                fraction = count.toFloat() / maxCount,
-                modifier = Modifier.weight(1f),
-            )
-        }
-    }
-}
-
-@Composable
-private fun Bar(label: String, count: Int, fraction: Float, modifier: Modifier = Modifier) {
-    Column(
-        modifier = modifier.fillMaxHeight(),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Bottom,
-    ) {
-        if (count > 0) {
-            Text(count.toString(), style = MaterialTheme.typography.labelSmall)
-            Spacer(Modifier.height(2.dp))
-        }
-        Box(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth(),
-            contentAlignment = Alignment.BottomCenter,
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .fillMaxHeight(fraction.coerceAtLeast(if (count > 0) 0.02f else 0f))
-                    .clip(RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp))
-                    .background(statsBarColor),
-            )
-        }
-        Spacer(Modifier.height(4.dp))
-        Text(label, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
     }
 }
