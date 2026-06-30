@@ -51,18 +51,20 @@ class GameStatsUiStateTest {
     }
 
     @Test
-    fun perDieBreakdown_scopedToGameRolls_sortedByName() {
+    fun perDieBreakdown_scopedToGameRolls_orderedByDieId() {
+        // Die 1 is named "Zed", die 2 "Alpha", so id-order and name-order disagree.
         val rolls = listOf(
             roll(1, listOf(1L to 2, 2L to 5)),
             roll(2, listOf(1L to 2, 2L to 6)),
         )
-        val state = buildGameStatsUiState("G", rolls, listOf(die(2, "Zed"), die(1, "Alpha")))
+        val state = buildGameStatsUiState("G", rolls, listOf(die(2, "Alpha"), die(1, "Zed")))
 
-        assertEquals(listOf("Alpha", "Zed"), state.dice.map { it.name })
-        val alpha = state.dice.first { it.name == "Alpha" }
-        assertEquals(2, alpha.stats.total)
-        // Alpha rolled 2 twice → count for face "2" (index 1) is 2.
-        assertEquals(2, alpha.stats.counts[1])
+        // Ordered by die id (1 before 2), not by name.
+        assertEquals(listOf("Zed", "Alpha"), state.dice.map { it.name })
+        val zed = state.dice.first { it.name == "Zed" }
+        assertEquals(2, zed.stats.total)
+        // Die 1 rolled 2 twice → count for face "2" (index 1) is 2.
+        assertEquals(2, zed.stats.counts[1])
     }
 
     @Test

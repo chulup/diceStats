@@ -30,7 +30,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -41,10 +40,9 @@ import xyz.chulup.dicestats.R
 import xyz.chulup.dicestats.feature.stats.DieStatistics
 import xyz.chulup.dicestats.feature.stats.FairnessVerdict
 import xyz.chulup.dicestats.feature.stats.RollTotalGroup
-
-private val barColor = Color(0xFF3F51B5)
-private val fairColor = Color(0xFF00C853)
-private val biasedColor = Color(0xFFFF6D00)
+import xyz.chulup.dicestats.feature.stats.statsBarColor
+import xyz.chulup.dicestats.feature.stats.statsBiasedColor
+import xyz.chulup.dicestats.feature.stats.statsFairColor
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -96,7 +94,15 @@ fun GameStatsScreen(
             uiState.totals.forEach { group -> TotalsCard(group) }
 
             SectionHeader(stringResource(R.string.game_stats_section_dice))
-            uiState.dice.forEach { performance -> DiePerformanceCard(performance) }
+            if (uiState.dice.isEmpty()) {
+                Text(
+                    stringResource(R.string.game_stats_dice_removed),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                uiState.dice.forEach { performance -> DiePerformanceCard(performance) }
+            }
         }
     }
 }
@@ -142,8 +148,8 @@ private fun TotalsCard(group: RollTotalGroup) {
 private fun DiePerformanceCard(performance: DiePerformance) {
     val stats = performance.stats
     val (color, verdict) = when (stats.verdict) {
-        FairnessVerdict.LOOKS_FAIR -> fairColor to stringResource(R.string.die_stats_fair)
-        FairnessVerdict.POSSIBLY_BIASED -> biasedColor to stringResource(R.string.die_stats_biased)
+        FairnessVerdict.LOOKS_FAIR -> statsFairColor to stringResource(R.string.die_stats_fair)
+        FairnessVerdict.POSSIBLY_BIASED -> statsBiasedColor to stringResource(R.string.die_stats_biased)
         FairnessVerdict.INSUFFICIENT_DATA ->
             MaterialTheme.colorScheme.onSurfaceVariant to stringResource(R.string.die_stats_insufficient)
     }
@@ -228,7 +234,7 @@ private fun Bar(label: String, count: Int, fraction: Float, modifier: Modifier =
                     .fillMaxWidth()
                     .fillMaxHeight(fraction.coerceAtLeast(if (count > 0) 0.02f else 0f))
                     .clip(RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp))
-                    .background(barColor),
+                    .background(statsBarColor),
             )
         }
         Spacer(Modifier.height(4.dp))

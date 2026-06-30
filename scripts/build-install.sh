@@ -21,4 +21,7 @@ if [[ ! -f "$apk" ]]; then
 fi
 
 echo "Installing $apk on $abi device..."
-adb install -r "$apk"
+# Cap the install so a broken/unreachable remote ADB server can't hang the build.
+# If this times out (exit 124) or otherwise fails, do NOT try to fix the ADB link
+# yourself — notify the user that the device is unreachable and move on.
+timeout 60 adb install -r "$apk"

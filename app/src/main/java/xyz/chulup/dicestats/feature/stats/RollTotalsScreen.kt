@@ -29,7 +29,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -37,8 +36,6 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import xyz.chulup.dicestats.R
-
-private val barColor = Color(0xFF3F51B5)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -146,7 +143,7 @@ private fun TotalBar(total: Int, count: Int, fraction: Float, modifier: Modifier
                     .fillMaxWidth()
                     .fillMaxHeight(fraction.coerceAtLeast(if (count > 0) 0.02f else 0f))
                     .clip(RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp))
-                    .background(barColor),
+                    .background(statsBarColor),
             )
         }
         Spacer(Modifier.height(4.dp))

@@ -3,6 +3,7 @@ package xyz.chulup.dicestats.feature.games
 import android.text.format.DateUtils
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -133,10 +134,11 @@ private fun GameItem(game: GameRow, onClick: () -> Unit, onFinish: () -> Unit) {
         headlineContent = { Text(game.name) },
         supportingContent = { Text("$timing · $rolls") },
         trailingContent = {
-            // Active games still expose Finish; closed games just show a drill-in chevron.
-            if (game.isActive) {
-                TextButton(onClick = onFinish) { Text(stringResource(R.string.game_finish)) }
-            } else {
+            // Every row drills into its stats; active games also expose Finish.
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (game.isActive) {
+                    TextButton(onClick = onFinish) { Text(stringResource(R.string.game_finish)) }
+                }
                 Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null)
             }
         },

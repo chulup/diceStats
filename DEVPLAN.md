@@ -79,3 +79,20 @@ Unprioritized; capture now, schedule later.
   chosen — rather than requiring a die be picked first.
 - **Per-game stats.** Once Games (v2) exist, show stats for all dice in a game at
   once (aggregate + per-die breakdown within the game).
+
+### Refactor
+The per-game stats screen (`GameStatsScreen`) currently copy-pastes UI from the
+existing stats screens. The shared chart palette has already been extracted to
+`feature/stats/StatsColors.kt`; the remaining duplication to consolidate:
+- **Shared bar renderer.** `GameStatsScreen.Bar`/`BarChart`,
+  `DieStatsScreen.FaceBar`, and `RollTotalsScreen.TotalBar` are near-identical bar
+  renderers (same `Column`/`Box`/`fillMaxHeight(fraction.coerceAtLeast(...))`
+  geometry, differing only in label type and the `count > 0` guard). Extract one
+  reusable `Bar`/`BarChart` and have all three screens use it.
+- **Shared roll-totals card.** `GameStatsScreen.TotalsCard` duplicates
+  `RollTotalsScreen.GroupCard` (same dice-count title, roll-count·mean line, and
+  per-`RollTotalGroup` bar chart). Extract a single reusable card.
+- **Shared fairness verdict mapping.** The `FairnessVerdict → (Color, String)`
+  `when` mapping is copy-pasted between `GameStatsScreen.DiePerformanceCard` and
+  `DieStatsScreen.FairnessCard`. Extract a shared helper returning the colour and
+  label for a verdict.

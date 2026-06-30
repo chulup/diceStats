@@ -75,6 +75,12 @@ This runs in WSL2; the Android SDK tools and ADB server live on the Windows host
   ```
   Then `adb devices` should list the connected device.
 
+  The install step in `./scripts/build-install.sh` is wrapped in `timeout 60` so an
+  unreachable host ADB server can't hang the build. **If the install times out or
+  fails (e.g. "cannot connect to daemon", exit 124), do not try to resolve the ADB
+  link yourself — notify the user that the device is unreachable and move on.** The
+  build/APK is still good; only the install needs a working device link.
+
 - **Instrumented tests against the remote device** — use `./scripts/android-test.sh`
   (optionally a test class as `$1`). `./gradlew connectedAndroidTest` hangs in this
   setup: Gradle's DDMLIB only talks to `127.0.0.1:5037` and can't use the remote ADB

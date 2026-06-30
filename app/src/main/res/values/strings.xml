@@ -77,6 +77,7 @@
     <string name="game_stats_empty">No rolls recorded for this game yet.</string>
     <string name="game_stats_section_totals">Roll totals</string>
     <string name="game_stats_section_dice">Dice</string>
+    <string name="game_stats_dice_removed">No rolls, or rolls were removed.</string>
     <string name="dice_list_empty">No dice registered yet. Save a roll to register one.</string>
     <plurals name="dice_list_roll_count">
         <item quantity="zero">No rolls</item>

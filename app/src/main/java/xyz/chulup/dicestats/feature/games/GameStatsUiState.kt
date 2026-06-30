@@ -5,6 +5,7 @@ import xyz.chulup.dicestats.data.db.RollWithResults
 import xyz.chulup.dicestats.feature.stats.DieStatistics
 import xyz.chulup.dicestats.feature.stats.RollTotalGroup
 import xyz.chulup.dicestats.feature.stats.RollTotalStatistics
+import java.util.TreeMap
 
 /** One die's performance within a single game: its name and stats over that game's rolls. */
 data class DiePerformance(
@@ -39,8 +40,8 @@ fun buildGameStatsUiState(
     val totals = RollTotalStatistics.from(rolls.map { rwr -> rwr.results.map { it.value } })
 
     val namesById = dice.associate { it.id to it.name }
-    // Group every result's face value by its die, preserving first-seen order.
-    val valuesByDie = LinkedHashMap<Long, MutableList<Int>>()
+    // Group every result's face value by its die; the TreeMap keeps dice ordered by id.
+    val valuesByDie = TreeMap<Long, MutableList<Int>>()
     for (roll in rolls) {
         for (result in roll.results) {
             val dieId = result.dieId ?: continue
@@ -52,7 +53,6 @@ fun buildGameStatsUiState(
             val name = namesById[dieId] ?: return@mapNotNull null
             DiePerformance(dieId, name, DieStatistics.from(values))
         }
-        .sortedBy { it.name.lowercase() }
 
     return GameStatsUiState(
         gameName = gameName,
