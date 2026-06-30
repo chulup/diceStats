@@ -88,6 +88,30 @@ Unprioritized; capture now, schedule later.
   (`DieColorSignature` / `DieIdentifier`) from a colour fingerprint to per-face image
   templates; pairs naturally with a `referencePhotoPath`-style asset set per die.
 
+### Annotation & training data
+- **Data-annotation build.** A separate build variant (debug/internal flavour, not
+  shipped) for labelling the recognition corpus and turning real misses into training
+  data. It presents a **carousel over all test photos**; each photo shows the **detected
+  dice with their bounding boxes and read values** overlaid. Per photo the annotator can:
+  **drop** a detection that's a false positive, **edit the value** of a correctly-detected
+  die, and hit a **"mark for further analysis"** button to flag the photo as a hard case.
+  **Every user edit is recorded** (drop / value correction / flag, with the photo id and
+  the model's original output) so the deltas become a labelled dataset for algorithm
+  improvement — feeding ground-truth boxes/values back into `photos/tests.txt`-style
+  fixtures and, later, training the numeral reader. Builds on the existing detection
+  pipeline + `PipCounter`; the recorded corrections are the same signal the confirm
+  screen's `wasCorrected` flag captures, but gathered deliberately and in bulk over the
+  whole photo set rather than incidentally per roll.
+- **Data-annotation build v2 — label the device's reported photos.** Same carousel and
+  recording mechanism, but sourced from the **photos the device reported as unrecognized**
+  (the `unrecognized/` captures pulled off the device) rather than the curated test set.
+  Because these are the hard cases the detector *missed*, the annotator works from scratch:
+  **draw a bounding box** around each die the model didn't find and **enter its value**,
+  building full ground truth (boxes + values) for exactly the photos the algorithm fails
+  on. Combined with v1's drop/correct edits, this yields a labelled corpus of both
+  false positives and false negatives — the misses are the most valuable training signal,
+  and the resulting boxes/values can graduate straight into `photos/tests.txt` fixtures.
+
 ### Confirmation UX
 - **On-photo value steppers.** Show the +/− value buttons directly below the
   selected die on the photo (in addition to / instead of the list rows), so
