@@ -299,6 +299,62 @@
           "value": 6
         }
       ]
+    },
+    {
+      "picture_name": "201.jpg",
+      "comment": "white d6 on light-wood floor; boxes null (analysis only) like 101-110",
+      "dice": [
+        { "type": "d6", "boundingBox": null, "value": 1 },
+        { "type": "d6", "boundingBox": null, "value": 5 }
+      ]
+    },
+    {
+      "picture_name": "202.jpg",
+      "comment": "white d6 on light-wood floor",
+      "dice": [
+        { "type": "d6", "boundingBox": null, "value": 1 },
+        { "type": "d6", "boundingBox": null, "value": 5 }
+      ]
+    },
+    {
+      "picture_name": "203.jpg",
+      "comment": "white d6 on light-wood floor",
+      "dice": [
+        { "type": "d6", "boundingBox": null, "value": 1 },
+        { "type": "d6", "boundingBox": null, "value": 2 }
+      ]
+    },
+    {
+      "picture_name": "204.jpg",
+      "comment": "two small white d6 on light-wood floor (small=1, large=2)",
+      "dice": [
+        { "type": "d6", "boundingBox": null, "value": 1 },
+        { "type": "d6", "boundingBox": null, "value": 2 }
+      ]
+    },
+    {
+      "picture_name": "205.jpg",
+      "comment": "white d6 on light-wood floor (small=6, large=3)",
+      "dice": [
+        { "type": "d6", "boundingBox": null, "value": 6 },
+        { "type": "d6", "boundingBox": null, "value": 3 }
+      ]
+    },
+    {
+      "picture_name": "206.jpg",
+      "comment": "white d6 on light-wood floor (small=4, large=6)",
+      "dice": [
+        { "type": "d6", "boundingBox": null, "value": 4 },
+        { "type": "d6", "boundingBox": null, "value": 6 }
+      ]
+    },
+    {
+      "picture_name": "207.jpg",
+      "comment": "white d6 on light-wood floor (small=5, large=1)",
+      "dice": [
+        { "type": "d6", "boundingBox": null, "value": 5 },
+        { "type": "d6", "boundingBox": null, "value": 1 }
+      ]
     }
   ]
 }

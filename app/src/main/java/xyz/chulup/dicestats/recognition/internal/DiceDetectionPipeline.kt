@@ -79,6 +79,35 @@ internal object DiceDetectionPipeline {
         val otsuMinFill: Float = 0.45f,
         /** Two boxes overlapping by more than this IoU are treated as the same die during the union. */
         val nmsIouThreshold: Float = 0.3f,
+
+        // --- White/bright pass (low-saturation dice on textured neutral surfaces) ---
+        /**
+         * Enables a supplementary pass for **white/grey dice on textured neutral surfaces**
+         * (e.g. white d6 on a light-wood floor). Such dice defeat both earlier passes: they
+         * are unsaturated (so the saturation mask ignores them) and the surface grain pushes
+         * the scene over [maxPlainEdgeDensity] (so the Otsu pass is gated off). They are,
+         * however, the **brightest, least-saturated** objects in frame — a near-white square
+         * standing proud of a tan/grey floor. This pass segments exactly that: pixels both
+         * brighter than the background by [brightValueMargin] and desaturated below
+         * [brightMaxSaturation]. The low-saturation constraint keeps coloured dice and coloured
+         * surfaces out (they are handled by, or rejected like, the saturation pass), so even on
+         * cluttered grain the mask stays sparse enough to leave only die-shaped blobs. Boxes are
+         * unioned with the earlier ones (NMS-deduplicated). See RESEARCH.md (detection).
+         */
+        val whitePass: Boolean = true,
+        /** How far above the image's **median** brightness (value, 0..255) a white-die pixel must sit. */
+        val brightValueMargin: Int = 20,
+        /** Absolute floor for the white-pass brightness threshold; dim scenes don't drop below it. */
+        val brightValueFloor: Int = 150,
+        /** Max HSV saturation (0..255) a white-die pixel may have — rejects coloured surfaces/dice. */
+        val brightMaxSaturation: Int = 70,
+        // White dice are compact, near-square bright blobs; these mirror the d6 saturation filters,
+        // a touch looser to tolerate the rounded corners and shading of an unsaturated die face.
+        val brightMinAreaFraction: Float = 0.0008f,
+        val brightMaxAreaFraction: Float = 0.12f,
+        val brightMinAspect: Float = 0.55f,
+        val brightMaxAspect: Float = 1.8f,
+        val brightMinFill: Float = 0.5f,
     )
 
     /**
@@ -134,6 +163,27 @@ internal object DiceDetectionPipeline {
                 for (box in otsuBoxes) {
                     if (boxes.none { iou(it, box) > params.nmsIouThreshold }) boxes.add(box)
                 }
+            }
+        }
+
+        // Supplementary white/bright pass: low-saturation dice (white d6) on textured neutral
+        // surfaces, which both passes above miss. Union-only, so it can never drop recall.
+        if (params.whitePass) {
+            val brightFloor = maxOf(params.brightValueFloor, medianValue(scaled.pixels) + params.brightValueMargin)
+            val brightMask = brightLowSatMask(scaled.pixels, brightFloor, params.brightMaxSaturation)
+            morphOpen(brightMask, w, h, params.openRadius)
+            morphClose(brightMask, w, h, params.closeRadius)
+            val brightBoxes = extractBoxes(
+                brightMask, w, h,
+                minArea = (params.brightMinAreaFraction * total).toInt().coerceAtLeast(1),
+                maxArea = (params.brightMaxAreaFraction * total).toInt(),
+                minAspect = params.brightMinAspect,
+                maxAspect = params.brightMaxAspect,
+                minFill = params.brightMinFill,
+                seedFraction = params.seedFraction,
+            )
+            for (box in brightBoxes) {
+                if (boxes.none { iou(it, box) > params.nmsIouThreshold }) boxes.add(box)
             }
         }
         return boxes
@@ -241,6 +291,41 @@ internal object DiceDetectionPipeline {
         }
         sats.sort()
         return sats[sats.size / 2]
+    }
+
+    /** Median HSV value/brightness (the max RGB channel) — a robust background-brightness estimate. */
+    private fun medianValue(pixels: IntArray): Int {
+        if (pixels.isEmpty()) return 0
+        val vals = IntArray(pixels.size)
+        for (i in pixels.indices) {
+            val p = pixels[i]
+            val r = (p shr 16) and 0xFF
+            val g = (p shr 8) and 0xFF
+            val b = p and 0xFF
+            vals[i] = maxOf(r, g, b)
+        }
+        vals.sort()
+        return vals[vals.size / 2]
+    }
+
+    /**
+     * Foreground (1) where a pixel is **bright** (value >= [minVal]) yet **desaturated**
+     * (saturation <= [maxSat]) — i.e. a white/grey surface. Mirrors [saturationValueMask]
+     * with the saturation test inverted, so it picks up exactly the dice that one misses.
+     */
+    private fun brightLowSatMask(pixels: IntArray, minVal: Int, maxSat: Int): ByteArray {
+        val mask = ByteArray(pixels.size)
+        for (i in pixels.indices) {
+            val p = pixels[i]
+            val r = (p shr 16) and 0xFF
+            val g = (p shr 8) and 0xFF
+            val b = p and 0xFF
+            val max = maxOf(r, g, b)
+            val min = minOf(r, g, b)
+            val sat = if (max == 0) 0 else (max - min) * 255 / max
+            if (max >= minVal && sat <= maxSat) mask[i] = 1
+        }
+        return mask
     }
 
     /** Foreground (1) where HSV saturation and value both clear their thresholds. */
