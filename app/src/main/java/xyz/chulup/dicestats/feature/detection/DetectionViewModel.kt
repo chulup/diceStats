@@ -55,6 +55,32 @@ data class DieAssignment(
 private fun DieAssignment.dieTypeIn(registered: List<DieEntity>): DieType? =
     dieId?.let { id -> registered.firstOrNull { it.id == id } }?.let { DieType.fromFaces(it.faces) }
 
+/**
+ * The die that follows [current] in [order], wrapping past the end — so tapping boxes
+ * in turn walks down the palette. Null when [order] is empty; falls back to the first
+ * entry when [current] isn't in [order] (`indexOfFirst` -> -1, so -1+1 == 0).
+ */
+internal fun nextActiveDie(order: List<DieEntity>, current: Long): Long? {
+    if (order.isEmpty()) return null
+    val cur = order.indexOfFirst { it.id == current }
+    return order[(cur + 1) % order.size].id
+}
+
+/**
+ * Power-of-two `inSampleSize` that keeps the longest edge at or above [targetMaxEdge]
+ * (BitmapFactory halves per step), so a decoded bitmap stays large enough to detect on
+ * without wasting memory on full-resolution captures.
+ */
+internal fun sampleSizeFor(width: Int, height: Int, targetMaxEdge: Int): Int {
+    var sample = 1
+    var longest = maxOf(width, height)
+    while (longest / 2 >= targetMaxEdge) {
+        longest /= 2
+        sample *= 2
+    }
+    return sample
+}
+
 sealed interface DetectionUiState {
     data object Loading : DetectionUiState
 
@@ -265,15 +291,7 @@ class DetectionViewModel @Inject constructor(
             val assigned = state.dice.mapIndexed { i, die ->
                 if (i == index) die.copy(dieId = active) else die
             }
-            val order = state.recentDice
-            val nextActive = when {
-                order.isEmpty() -> null
-                else -> {
-                    val cur = order.indexOfFirst { it.id == active }
-                    order[(cur + 1) % order.size].id
-                }
-            }
-            state.copy(dice = assigned, activeDieId = nextActive)
+            state.copy(dice = assigned, activeDieId = nextActiveDie(state.recentDice, active))
         }
     }
 
@@ -440,16 +458,6 @@ class DetectionViewModel @Inject constructor(
             ExifInterface.ORIENTATION_ROTATE_270 -> 270
             else -> 0
         }
-
-    private fun sampleSizeFor(width: Int, height: Int, targetMaxEdge: Int): Int {
-        var sample = 1
-        var longest = maxOf(width, height)
-        while (longest / 2 >= targetMaxEdge) {
-            longest /= 2
-            sample *= 2
-        }
-        return sample
-    }
 
     companion object {
         const val ARG_PHOTO_PATH = "photoPath"
