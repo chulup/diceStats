@@ -31,6 +31,41 @@ Focused on evaluating and tuning the Otsu detection pass (see
       `packaging { resources { excludes } }` block — carefully, since JavaCPP's `Loader`
       preloads the dependency graph and dropping a needed lib breaks `features2d` loading.
 
+## Die pools (design settled — see DESIGN.md "Die Pools")
+
+Interchangeable identical dice (Risk: red ×3, blue ×2) tracked as one `Die` row
+with `count` as an upper bound; storage keeps one `DieResult` per detected die.
+
+Implementation (ready to schedule):
+
+- [ ] **Schema.** Additive migration: `count INTEGER NOT NULL DEFAULT 1` on `dice`,
+      `usesDicePools INTEGER NOT NULL DEFAULT 0` on `games`.
+- [ ] **Registration + lists.** Count stepper on the register-die dialog; dice
+      list and confirm-screen palette chips render "×N". "Uses dice pools" toggle
+      when starting a game.
+- [ ] **Confirm screen.** `canSave` additionally requires ≤ `count` boxes per die
+      per roll (fewer is fine); palette entries at capacity gray out; active-die
+      advance stays on a pool until its capacity in this roll is used; when the
+      active game has `usesDicePools`, auto-assign detections whose colour
+      signature matches a pool.
+- [ ] **Pool stats page.** "×N" title, "throws · rolls" sample line (needs a
+      `COUNT(DISTINCT rollId)` DAO query), "pooled across N dice" verdict caption.
+      Per-roll charts (sum / highest-of-N), if/when added, bucket by actual N.
+
+Deferred follow-ups (captured, not being thought about now):
+
+- [ ] **"More info" accordion on pool stats** explaining how to collect enough
+      statistics to identify a *bad die* within a pool (e.g. calibration rolls of
+      one die at a time) — pool pages only flag pool-level unfairness.
+- [ ] **Roll editing.** Open a roll from the roll log and modify / re-detect its
+      dice (fixes partially-detected pool rolls after the fact).
+- [ ] **`GameRules` entity.** Predefined per-game rules + bespoke stats (e.g. Risk
+      attacker-vs-defender highest-die comparisons); a `Game` binds to a specific
+      `GameRules` instance. Natural home for cross-pool analyses.
+- [ ] **Die edit screen.** Rename a die; change a pool's `count` — increase is
+      always allowed, decrease only when no existing roll uses more dice of the
+      pool than the new count.
+
 ## Future improvements (backlog)
 
 Unprioritized; capture now, schedule later.
@@ -128,7 +163,8 @@ Unprioritized; capture now, schedule later.
   together (overview/comparison), drilling into a single die's detail when one is
   chosen — rather than requiring a die be picked first.
 - **Per-game stats.** Once Games (v2) exist, show stats for all dice in a game at
-  once (aggregate + per-die breakdown within the game).
+  once (aggregate + per-die breakdown within the game). Beyond that: **every**
+  stats view (die, pool, roll totals) should be scopable to a game.
 
 ### Refactor
 The per-game stats screen (`GameStatsScreen`) used to copy-paste UI from the

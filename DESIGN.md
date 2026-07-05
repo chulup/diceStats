@@ -20,7 +20,7 @@ the app proposes results and the user confirms/corrects before saving.
 | Ver | Adds |
 |---|---|
 | **MVP** | d6 + pip counting, multi-die detection per photo, manual die assignment, per-die stats |
-| **v2** | Games (timed sessions) + Die Groups (joint/sum distributions) |
+| **v2** | Games (timed sessions), Die Pools (interchangeable dice), Die Groups (joint/sum distributions) |
 | **v3** | Players + per-player stats within a game |
 
 Each version is additive. Forward-looking foreign keys are introduced as nullable
@@ -112,10 +112,11 @@ Confirmation rule at that point: **require the user to pick a die when
 ## Data model
 
 ```
-Die                       (a registered physical die)
+Die                       (a registered physical die — or a pool of identical dice)
   id, name                e.g. "Red d6"
   faces = 6               fixed for MVP; kept for future die types
   kind = PIPPED
+  count = 1               upper bound of identical dice; >1 = a pool (see Die Pools)
   referencePhotoPath?
   createdAt
 
@@ -132,6 +133,44 @@ DieResult                 (one die within a roll)
 
 A `Roll` has many `DieResult`s (multiple dice per photo). Stats query `DieResult`
 grouped by `dieId`.
+
+## Die Pools (interchangeable dice, no individual identity)
+
+Some games roll several identical dice whose individual identity doesn't matter —
+Risk: up to 3 red attacker dice + up to 2 blue defender dice. A **pool** is a `Die`
+row with `count > 1`: the entry stands for a *class* of interchangeable physical
+dice, not one die. Design decisions (settled 2026-07):
+
+- **Storage is unchanged.** One `DieResult` per detected die, exactly as for
+  individual dice; a pool's results share its `dieId` (duplicate `dieId` within a
+  roll is legal, up to `count`). Each result keeps its own value, bounding box,
+  confidence, and `wasCorrected` — a pool roll never collapses into a sum or list.
+- **`count` is an upper bound, not an exact size.** A Risk attacker legally rolls
+  1–3 red dice, so fewer-than-count per roll is normal and unflagged. Assigning
+  *more* than `count` boxes to a pool in one roll blocks saving.
+- **Confirm-screen UX.** Palette entries already at capacity for the current roll
+  are grayed out (no nudges about "missing" dice). The active-die auto-advance
+  stays on a pool until its capacity in this roll is used, then moves on — so a
+  Risk roll is tap-tap-tap red, auto-advance, tap-tap blue.
+- **Auto-assignment is opt-in per game.** `Game.usesDicePools` (new flag): while
+  the active game uses pools, detected dice whose colour signature matches a pool
+  are auto-assigned to it. Outside such a game the flow stays fully manual. Pools
+  make colour identity *more* reliable — identical dice are no longer ambiguous
+  candidates, and the pool's fingerprint averages over every member's crops.
+- **Stats semantics.** The pool's stats page pools all member throws (the existing
+  per-die queries, unchanged). Chi-square then tests "**the pool is fair as a
+  whole**"; a single biased die is diluted `count`× and *identifying* it is a
+  non-goal — flagging pool-level unfairness is enough. The page shows "N throws ·
+  M rolls" (per-photo vs per-die counts diverge for pools) and captions the
+  verdict "pooled across N dice". Per-roll derived stats (sum, highest-of-N)
+  bucket by the **actual** number of pool dice in each roll — never by `count`,
+  since rolls legitimately vary (and detection can miss a die).
+- **No migration** of previously-registered individual dice; pools and individual
+  dice coexist freely.
+- **Distinct from Die Groups** (v2 below — a named set of dice rolled together
+  for joint stats): the concepts compose. A group member may itself be a pool
+  ("Risk attack" = {Red ×3}); multiplicity lives on the die, so `DieGroupMember`
+  needs no change.
 
 ## Screens (MVP)
 
@@ -168,7 +207,8 @@ Single-activity, Compose Navigation.
 ## Deferred features (designed now, built later)
 
 ### v2 — Games (timed session)
-- `Game(id, name, startedAt, endedAt?)`.
+- `Game(id, name, startedAt, endedAt?, usesDicePools)` — the flag gates
+  pool auto-assignment on the confirm screen (see Die Pools).
 - An active game is "open"; while open, new `Roll`s get its `gameId`. The user
   explicitly **starts** and **finishes** the game.
 - **Game stats**: aggregate all rolls in the game, broken down per die and per die

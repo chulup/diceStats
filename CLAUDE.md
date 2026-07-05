@@ -8,6 +8,7 @@ Guidance for Claude Code when working in this Android project.
 - [DEVPLAN.md](DEVPLAN.md) — immediate tasks + future-improvements backlog.
 - [CHANGELOG.md](CHANGELOG.md) — completed work.
 - [RESEARCH.md](RESEARCH.md) — recognition research (see below).
+- `design-records/` — Architecture Design Records (`YYYY-MM-DD-slug.md`, one per settled decision); see its README for the format.
 - `app/src/main/java/xyz/chulup/dicestats/` — source, package-by-feature (`feature/*`, `data/*`, `recognition/*`, `ui/*`, `di/*`).
 - `photos/` + `photos/tests.txt` — recognition test images and ground truth.
 - `app/src/test/resources/photos/*.ppm` — downscaled JVM detection fixtures.
