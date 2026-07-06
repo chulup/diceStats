@@ -38,7 +38,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -63,6 +62,7 @@ import coil.compose.AsyncImage
 import xyz.chulup.dicestats.R
 import xyz.chulup.dicestats.data.db.GameEntity
 import xyz.chulup.dicestats.data.db.RollWithResults
+import xyz.chulup.dicestats.feature.games.StartGameDialog
 import java.io.File
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
@@ -161,9 +161,9 @@ fun RollLogScreen(
 
     if (showStartGameDialog) {
         StartGameDialog(
-            onConfirm = { name ->
+            onConfirm = { name, usesDicePools ->
                 showStartGameDialog = false
-                viewModel.startGame(name)
+                viewModel.startGame(name, usesDicePools)
             },
             onDismiss = { showStartGameDialog = false },
         )
@@ -247,36 +247,6 @@ private fun GameBanner(
             TextButton(onClick = onFinish) { Text(stringResource(R.string.game_finish)) }
         }
     }
-}
-
-/** Name-entry dialog for starting a new game. */
-@Composable
-private fun StartGameDialog(
-    onConfirm: (String) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    var name by remember { mutableStateOf("") }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.game_start)) },
-        text = {
-            OutlinedTextField(
-                value = name,
-                onValueChange = { name = it },
-                singleLine = true,
-                label = { Text(stringResource(R.string.game_name_hint)) },
-            )
-        },
-        confirmButton = {
-            TextButton(
-                onClick = { onConfirm(name) },
-                enabled = name.isNotBlank(),
-            ) { Text(stringResource(R.string.game_start)) }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.dialog_cancel)) }
-        },
-    )
 }
 
 /** Lets the user pick an existing game to add the selected rolls to. */
