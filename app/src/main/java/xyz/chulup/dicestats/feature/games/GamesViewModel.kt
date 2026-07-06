@@ -21,10 +21,10 @@ class GamesViewModel @Inject constructor(
             buildGamesUiState(games, counts)
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), GamesUiState())
 
-    fun startGame(name: String) {
+    fun startGame(name: String, usesDicePools: Boolean = false) {
         val trimmed = name.trim()
         if (trimmed.isEmpty()) return
-        viewModelScope.launch { repository.startGame(trimmed) }
+        viewModelScope.launch { repository.startGame(trimmed, usesDicePools) }
     }
 
     fun finishGame(id: Long) {

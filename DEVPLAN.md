@@ -36,21 +36,23 @@ Focused on evaluating and tuning the Otsu detection pass (see
 Interchangeable identical dice (Risk: red ×3, blue ×2) tracked as one `Die` row
 with `count` as an upper bound; storage keeps one `DieResult` per detected die.
 
-Implementation (ready to schedule):
+Implementation:
 
-- [ ] **Schema.** Additive migration: `count INTEGER NOT NULL DEFAULT 1` on `dice`,
-      `usesDicePools INTEGER NOT NULL DEFAULT 0` on `games`.
-- [ ] **Registration + lists.** Count stepper on the register-die dialog; dice
-      list and confirm-screen palette chips render "×N". "Uses dice pools" toggle
-      when starting a game.
-- [ ] **Confirm screen.** `canSave` additionally requires ≤ `count` boxes per die
+- [x] **Schema.** Additive migration (v3→v4): `count INTEGER NOT NULL DEFAULT 1` on
+      `dice`, `usesDicePools INTEGER NOT NULL DEFAULT 0` on `games`.
+- [x] **Registration + lists.** Count stepper on the register-die dialog; dice
+      list and confirm-screen palette chips render "×N" (`ui/DieDisplayName.kt`).
+      "Uses dice pools" toggle when starting a game.
+- [x] **Confirm screen.** `canSave` additionally requires ≤ `count` boxes per die
       per roll (fewer is fine); palette entries at capacity gray out; active-die
-      advance stays on a pool until its capacity in this roll is used; when the
-      active game has `usesDicePools`, auto-assign detections whose colour
-      signature matches a pool.
-- [ ] **Pool stats page.** "×N" title, "throws · rolls" sample line (needs a
-      `COUNT(DISTINCT rollId)` DAO query), "pooled across N dice" verdict caption.
-      Per-roll charts (sum / highest-of-N), if/when added, bucket by actual N.
+      advance stays on a pool until its capacity in this roll is used
+      (`activeDieAfterAssignment`); when the active game has `usesDicePools`,
+      pools join the colour-signature auto-assign candidates, with overflow
+      capped to capacity by confidence (`capAutoAssignments`). Pure logic covered
+      by `DetectionLogicTest`.
+- [x] **Pool stats page.** "×N" title, "throws · rolls" sample line
+      (`COUNT(DISTINCT rollId)` DAO query), "pooled across N dice" verdict caption.
+      Per-roll charts (sum / highest-of-N), if/when added, must bucket by actual N.
 
 Deferred follow-ups (captured, not being thought about now):
 

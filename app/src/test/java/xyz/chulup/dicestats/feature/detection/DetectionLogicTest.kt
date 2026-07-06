@@ -18,17 +18,23 @@ class DetectionLogicTest {
 
     private val box = BoundingBox(0f, 0f, 1f, 1f)
 
-    private fun die(id: Long, faces: Int = 6, createdAt: Long = 0) =
-        DieEntity(id = id, name = "d$faces", faces = faces, createdAt = createdAt)
+    private fun die(id: Long, faces: Int = 6, createdAt: Long = 0, count: Int = 1) =
+        DieEntity(id = id, name = "d$faces", faces = faces, count = count, createdAt = createdAt)
 
-    private fun assignment(value: Int, dieId: Long?, recognizedValue: Int? = value, edited: Boolean = false) =
-        DieAssignment(
-            boundingBox = box,
-            value = value,
-            recognizedValue = recognizedValue,
-            dieId = dieId,
-            edited = edited,
-        )
+    private fun assignment(
+        value: Int,
+        dieId: Long?,
+        recognizedValue: Int? = value,
+        edited: Boolean = false,
+        dieIdConfidence: Float? = null,
+    ) = DieAssignment(
+        boundingBox = box,
+        value = value,
+        recognizedValue = recognizedValue,
+        dieId = dieId,
+        dieIdConfidence = dieIdConfidence,
+        edited = edited,
+    )
 
     private fun ready(dice: List<DieAssignment>, registered: List<DieEntity>) =
         DetectionUiState.Ready(
@@ -80,6 +86,41 @@ class DetectionLogicTest {
             registered = listOf(die(1)),
         )
         assertFalse(state.canSave)
+    }
+
+    @Test
+    fun canSave_isFalse_whenAPoolCarriesMoreBoxesThanItsCount() {
+        // Four boxes on a 3-die pool is a definite user error.
+        val pool = die(1, count = 3)
+        val state = ready(
+            dice = List(4) { assignment(value = 2, dieId = 1L) },
+            registered = listOf(pool),
+        )
+        assertFalse(state.canSave)
+    }
+
+    @Test
+    fun canSave_isTrue_whenAPoolIsAtOrUnderItsCount() {
+        // count is an upper bound: fewer dice than the pool holds is a normal roll.
+        val pool = die(1, count = 3)
+        assertTrue(ready(List(3) { assignment(value = 2, dieId = 1L) }, listOf(pool)).canSave)
+        assertTrue(ready(List(2) { assignment(value = 2, dieId = 1L) }, listOf(pool)).canSave)
+    }
+
+    // --- atCapacityDieIds ---------------------------------------------------------
+
+    @Test
+    fun atCapacityDieIds_flagsFullDiceAndPools() {
+        val state = ready(
+            dice = listOf(
+                assignment(value = 1, dieId = 1L),
+                assignment(value = 2, dieId = 2L),
+                assignment(value = 3, dieId = 2L),
+            ),
+            registered = listOf(die(1), die(2, count = 3), die(3)),
+        )
+        // Die 1 (single) is full; pool 2 has one slot left; die 3 is untouched.
+        assertEquals(setOf(1L), state.atCapacityDieIds)
     }
 
     // --- recentDice -------------------------------------------------------------
@@ -137,6 +178,69 @@ class DetectionLogicTest {
     @Test
     fun nextActiveDie_isNull_whenNoDice() {
         assertNull(nextActiveDie(emptyList(), current = 1L))
+    }
+
+    @Test
+    fun nextActiveDie_skipsDiceAtCapacity() {
+        val order = listOf(die(1), die(2), die(3))
+        val counts = mapOf(2L to 1) // die 2 (count 1) is full
+        assertEquals(3L, nextActiveDie(order, current = 1L, assignedCounts = counts))
+    }
+
+    @Test
+    fun nextActiveDie_isNull_whenEveryDieIsFull() {
+        val order = listOf(die(1), die(2, count = 2))
+        val counts = mapOf(1L to 1, 2L to 2)
+        assertNull(nextActiveDie(order, current = 1L, assignedCounts = counts))
+    }
+
+    // --- activeDieAfterAssignment -------------------------------------------------
+
+    @Test
+    fun activeDie_staysOnPool_untilItsCapacityIsUsed() {
+        // Risk red ×3 with one box assigned: two slots left, so the highlight stays.
+        val order = listOf(die(1, count = 3), die(2, count = 2))
+        assertEquals(1L, activeDieAfterAssignment(order, justAssigned = 1L, assignedCounts = mapOf(1L to 1)))
+        assertEquals(1L, activeDieAfterAssignment(order, justAssigned = 1L, assignedCounts = mapOf(1L to 2)))
+    }
+
+    @Test
+    fun activeDie_advances_whenThePoolFills() {
+        val order = listOf(die(1, count = 3), die(2, count = 2))
+        assertEquals(2L, activeDieAfterAssignment(order, justAssigned = 1L, assignedCounts = mapOf(1L to 3)))
+    }
+
+    @Test
+    fun activeDie_advancesImmediately_forSingleDice() {
+        val order = listOf(die(1), die(2))
+        assertEquals(2L, activeDieAfterAssignment(order, justAssigned = 1L, assignedCounts = mapOf(1L to 1)))
+    }
+
+    // --- capAutoAssignments ---------------------------------------------------------
+
+    @Test
+    fun capAutoAssignments_keepsAssignmentsWithinCapacity() {
+        val pool = die(1, count = 2)
+        val input = listOf(
+            assignment(value = 1, dieId = 1L, dieIdConfidence = 0.9f),
+            assignment(value = 2, dieId = 1L, dieIdConfidence = 0.7f),
+        )
+        assertEquals(input, capAutoAssignments(input, listOf(pool)))
+    }
+
+    @Test
+    fun capAutoAssignments_unassignsLowestConfidenceOverflow() {
+        val pool = die(1, count = 2)
+        val input = listOf(
+            assignment(value = 1, dieId = 1L, dieIdConfidence = 0.9f),
+            assignment(value = 2, dieId = 1L, dieIdConfidence = 0.6f),
+            assignment(value = 3, dieId = 1L, dieIdConfidence = 0.8f),
+        )
+        val capped = capAutoAssignments(input, listOf(pool))
+        assertEquals(1L, capped[0].dieId)
+        assertNull(capped[1].dieId) // the weakest guess loses its assignment
+        assertNull(capped[1].dieIdConfidence)
+        assertEquals(1L, capped[2].dieId)
     }
 
     // --- sampleSizeFor ----------------------------------------------------------

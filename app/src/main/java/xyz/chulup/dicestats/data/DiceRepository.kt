@@ -55,6 +55,9 @@ class DiceRepository @Inject constructor(
     /** The currently open game (at most one), or null when none is running. */
     val activeGame: Flow<GameEntity?> = gameDao.observeActive()
 
+    /** One-shot read of the open game (for decisions at recognition time). */
+    suspend fun activeGameNow(): GameEntity? = gameDao.getActive()
+
     /** A single game by id (for the per-game stats screen). */
     fun game(gameId: Long): Flow<GameEntity?> = gameDao.observeById(gameId)
 
@@ -69,8 +72,14 @@ class DiceRepository @Inject constructor(
     val rollCountsByGame: Flow<List<GameRollCount>> = gameDao.observeRollCountsByGame()
 
     /** Opens a new game; subsequent rolls are tagged to it until it is finished. */
-    suspend fun startGame(name: String): Long =
-        gameDao.insert(GameEntity(name = name, startedAt = System.currentTimeMillis()))
+    suspend fun startGame(name: String, usesDicePools: Boolean = false): Long =
+        gameDao.insert(
+            GameEntity(
+                name = name,
+                startedAt = System.currentTimeMillis(),
+                usesDicePools = usesDicePools,
+            ),
+        )
 
     /** Closes a game; later rolls are no longer tagged to it. */
     suspend fun finishGame(id: Long) =
@@ -91,8 +100,18 @@ class DiceRepository @Inject constructor(
             values.filter { type.isValidValue(it) }
         }
 
-    suspend fun registerDie(name: String): Long =
-        dieDao.insert(DieEntity(name = name, createdAt = System.currentTimeMillis()))
+    /** Registers a die; [count] > 1 makes it a pool of interchangeable dice. */
+    /** Distinct rolls a die appears in (for pools this is fewer than its throw count). */
+    fun rollCountForDie(dieId: Long): Flow<Int> = dieDao.observeRollCountForDie(dieId)
+
+    suspend fun registerDie(name: String, count: Int = 1): Long =
+        dieDao.insert(
+            DieEntity(
+                name = name,
+                count = count.coerceAtLeast(1),
+                createdAt = System.currentTimeMillis(),
+            ),
+        )
 
     /** Persists a roll and its per-die results; returns the new roll id. */
     suspend fun saveRoll(photoPath: String, capturedAt: Long, dice: List<ConfirmedDie>): Long {

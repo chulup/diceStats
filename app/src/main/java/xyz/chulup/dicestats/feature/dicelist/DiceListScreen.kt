@@ -30,6 +30,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import xyz.chulup.dicestats.R
+import xyz.chulup.dicestats.ui.dieDisplayName
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -91,7 +92,7 @@ fun DiceListScreen(
                 items(uiState.dice, key = { it.id }) { die ->
                     ListItem(
                         leadingContent = { Icon(Icons.Default.Casino, contentDescription = null) },
-                        headlineContent = { Text(die.name) },
+                        headlineContent = { Text(dieDisplayName(die.name, die.dieCount)) },
                         supportingContent = {
                             Text(pluralStringResource(R.plurals.dice_list_roll_count, die.rollCount, die.rollCount))
                         },

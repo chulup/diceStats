@@ -22,7 +22,11 @@ object DataModule {
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): DiceDatabase =
         Room.databaseBuilder(context, DiceDatabase::class.java, "dicestats.db")
-            .addMigrations(DiceDatabase.MIGRATION_1_2, DiceDatabase.MIGRATION_2_3)
+            .addMigrations(
+                DiceDatabase.MIGRATION_1_2,
+                DiceDatabase.MIGRATION_2_3,
+                DiceDatabase.MIGRATION_3_4,
+            )
             .build()
 
     @Provides

@@ -11,7 +11,7 @@ import kotlinx.coroutines.flow.stateIn
 import javax.inject.Inject
 
 /** A registered die plus its recorded-roll count, for the dice list. */
-data class DieListItem(val id: Long, val name: String, val rollCount: Int)
+data class DieListItem(val id: Long, val name: String, val dieCount: Int, val rollCount: Int)
 
 data class DiceListUiState(val dice: List<DieListItem> = emptyList())
 
@@ -24,7 +24,7 @@ class DiceListViewModel @Inject constructor(
         combine(repository.dice, repository.rollCountsByDie) { dice, counts ->
             val countById = counts.associate { it.dieId to it.count }
             DiceListUiState(
-                dice = dice.map { DieListItem(it.id, it.name, countById[it.id] ?: 0) },
+                dice = dice.map { DieListItem(it.id, it.name, it.count, countById[it.id] ?: 0) },
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), DiceListUiState())
 }

@@ -14,8 +14,14 @@ import javax.inject.Inject
 
 data class DieStatsUiState(
     val dieName: String? = null,
+    /** Physical dice behind this entry; > 1 means a pool and pooled statistics. */
+    val dieCount: Int = 1,
+    /** Distinct rolls the die appears in ([DieStatistics.total] counts throws). */
+    val rollCount: Int = 0,
     val stats: DieStatistics = DieStatistics.from(emptyList()),
-)
+) {
+    val isPool: Boolean get() = dieCount > 1
+}
 
 /** Per-die statistics screen: face distribution, mean, and chi-square fairness. */
 @HiltViewModel
@@ -28,9 +34,18 @@ class DieStatsViewModel @Inject constructor(
         savedStateHandle.get<Long>(ARG_DIE_ID) ?: error("dieId argument required")
 
     val uiState: StateFlow<DieStatsUiState> =
-        combine(repository.die(dieId), repository.valuesForDie(dieId)) { die, values ->
+        combine(
+            repository.die(dieId),
+            repository.valuesForDie(dieId),
+            repository.rollCountForDie(dieId),
+        ) { die, values, rollCount ->
             val dieType = die?.let { DieType.fromFaces(it.faces) } ?: DieType.DEFAULT
-            DieStatsUiState(dieName = die?.name, stats = DieStatistics.from(values, dieType))
+            DieStatsUiState(
+                dieName = die?.name,
+                dieCount = die?.count ?: 1,
+                rollCount = rollCount,
+                stats = DieStatistics.from(values, dieType),
+            )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), DieStatsUiState())
 
     companion object {

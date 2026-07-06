@@ -57,13 +57,66 @@ private fun DieAssignment.dieTypeIn(registered: List<DieEntity>): DieType? =
 
 /**
  * The die that follows [current] in [order], wrapping past the end — so tapping boxes
- * in turn walks down the palette. Null when [order] is empty; falls back to the first
- * entry when [current] isn't in [order] (`indexOfFirst` -> -1, so -1+1 == 0).
+ * in turn walks down the palette. Dice already at their per-roll capacity (per
+ * [assignedCounts]) are skipped; null when [order] is empty or every die is full.
+ * Falls back to the first entry when [current] isn't in [order] (`indexOfFirst` -> -1,
+ * so -1+1 == 0).
  */
-internal fun nextActiveDie(order: List<DieEntity>, current: Long): Long? {
+internal fun nextActiveDie(
+    order: List<DieEntity>,
+    current: Long,
+    assignedCounts: Map<Long, Int> = emptyMap(),
+): Long? {
     if (order.isEmpty()) return null
     val cur = order.indexOfFirst { it.id == current }
-    return order[(cur + 1) % order.size].id
+    for (step in 1..order.size) {
+        val candidate = order[(cur + step) % order.size]
+        if ((assignedCounts[candidate.id] ?: 0) < candidate.count) return candidate.id
+    }
+    return null
+}
+
+/**
+ * The palette die to highlight after a box was identified as [justAssigned]: a pool
+ * with remaining per-roll capacity keeps the highlight (tap-tap-tap fills the pool),
+ * otherwise the highlight advances to the next non-full die.
+ */
+internal fun activeDieAfterAssignment(
+    order: List<DieEntity>,
+    justAssigned: Long,
+    assignedCounts: Map<Long, Int>,
+): Long? {
+    val die = order.firstOrNull { it.id == justAssigned }
+    if (die != null && (assignedCounts[die.id] ?: 0) < die.count) return justAssigned
+    return nextActiveDie(order, justAssigned, assignedCounts)
+}
+
+/**
+ * Unassigns the lowest-confidence auto-guesses that would put a die over its per-roll
+ * capacity, so recognition never proposes more boxes on a pool than it has dice. (The
+ * user can still over-assign manually; [DetectionUiState.Ready.canSave] blocks that.)
+ */
+internal fun capAutoAssignments(
+    assignments: List<DieAssignment>,
+    registered: List<DieEntity>,
+): List<DieAssignment> {
+    val capacity = registered.associate { it.id to it.count }
+    val drop = mutableSetOf<Int>()
+    assignments.withIndex()
+        .filter { it.value.dieId != null }
+        .groupBy { it.value.dieId!! }
+        .forEach { (dieId, entries) ->
+            val cap = capacity[dieId] ?: return@forEach
+            if (entries.size > cap) {
+                entries.sortedByDescending { it.value.dieIdConfidence ?: 0f }
+                    .drop(cap)
+                    .forEach { drop += it.index }
+            }
+        }
+    if (drop.isEmpty()) return assignments
+    return assignments.mapIndexed { i, a ->
+        if (i in drop) a.copy(dieId = null, dieIdConfidence = null) else a
+    }
 }
 
 /**
@@ -97,9 +150,31 @@ sealed interface DetectionUiState {
         /** True while re-detection on a cropped region is running. */
         val detecting: Boolean = false,
     ) : DetectionUiState {
-        /** Every die must be assigned and have a value that's a real face of it (DESIGN.md). */
+        /**
+         * Every die must be assigned and have a value that's a real face of it, and no
+         * die may carry more boxes than its per-roll capacity — a pool of 3 can't
+         * appear 4 times in one photo (DESIGN.md "Die Pools"; fewer is fine).
+         */
         val canSave: Boolean
-            get() = dice.isNotEmpty() && dice.all { it.dieTypeIn(registeredDice)?.isValidValue(it.value) == true }
+            get() = dice.isNotEmpty() &&
+                dice.all { it.dieTypeIn(registeredDice)?.isValidValue(it.value) == true } &&
+                assignedCounts.all { (id, n) ->
+                    (registeredDice.firstOrNull { it.id == id }?.count ?: 0) >= n
+                }
+
+        /** Boxes assigned to each die in this roll, keyed by die id. */
+        val assignedCounts: Map<Long, Int>
+            get() = dice.mapNotNull { it.dieId }.groupingBy { it }.eachCount()
+
+        /** Dice whose per-roll capacity is exhausted — the palette grays these out. */
+        val atCapacityDieIds: Set<Long>
+            get() {
+                val counts = assignedCounts
+                return registeredDice
+                    .filter { (counts[it.id] ?: 0) >= it.count }
+                    .map { it.id }
+                    .toSet()
+            }
 
         /** Registered dice ordered most-recent-first — the tap-to-identify palette. */
         val recentDice: List<DieEntity>
@@ -167,12 +242,18 @@ class DetectionViewModel @Inject constructor(
             _uiState.value = result.fold(
                 onSuccess = { (ratio, dice) ->
                     val registered = registeredDice.value
+                    // Start the palette on the newest die that still has room in this
+                    // roll (auto-assignment may have filled a pool already).
+                    val counts = dice.mapNotNull { it.dieId }.groupingBy { it }.eachCount()
+                    val active = registered
+                        .sortedByDescending { it.createdAt }
+                        .firstOrNull { (counts[it.id] ?: 0) < it.count }
                     DetectionUiState.Ready(
                         photoPath = currentPhotoPath,
                         aspectRatio = ratio,
                         dice = dice,
                         registeredDice = registered,
-                        activeDieId = registered.maxByOrNull { it.createdAt }?.id,
+                        activeDieId = active?.id,
                     )
                 },
                 onFailure = { DetectionUiState.Error(it.message ?: "Detection failed") },
@@ -225,8 +306,11 @@ class DetectionViewModel @Inject constructor(
         registered: List<DieEntity>,
     ): List<DieAssignment> {
         val detected = recognizer.recognize(bitmap)
-        val candidates = identityCandidates(registered)
-        return detected.map { det ->
+        // Pools are auto-assign candidates only inside a game that opted into them
+        // (DESIGN.md "Die Pools"); individual dice are matched as before.
+        val poolsEnabled = repository.activeGameNow()?.usesDicePools == true
+        val candidates = identityCandidates(registered.filter { poolsEnabled || !it.isPool })
+        val assignments = detected.map { det ->
             val signature = colorAnalyzer.signature(bitmap, det.boundingBox)
             val guess = signature
                 ?.let { identifier.identify(it, candidates) }
@@ -240,6 +324,7 @@ class DetectionViewModel @Inject constructor(
                 signature = signature,
             )
         }
+        return capAutoAssignments(assignments, registered)
     }
 
     private fun identityCandidates(dice: List<DieEntity>): List<DieIdentifier.Candidate> =
@@ -280,9 +365,10 @@ class DetectionViewModel @Inject constructor(
     }
 
     /**
-     * Identifies the tapped die as the active die from the palette, then advances
-     * the active selection to the next die in the recent list — so tapping boxes
-     * in order walks down the palette.
+     * Identifies the tapped die as the active die from the palette. The active
+     * selection stays on a pool until its per-roll capacity is used, then advances
+     * to the next non-full die — so tapping boxes in order walks down the palette,
+     * lingering on pools (DESIGN.md "Die Pools").
      */
     fun identifyAsActive(index: Int) {
         _uiState.update { state ->
@@ -291,25 +377,29 @@ class DetectionViewModel @Inject constructor(
             val assigned = state.dice.mapIndexed { i, die ->
                 if (i == index) die.copy(dieId = active) else die
             }
-            state.copy(dice = assigned, activeDieId = nextActiveDie(state.recentDice, active))
+            val counts = assigned.mapNotNull { it.dieId }.groupingBy { it }.eachCount()
+            state.copy(
+                dice = assigned,
+                activeDieId = activeDieAfterAssignment(state.recentDice, active, counts),
+            )
         }
     }
 
-    fun registerAndAssign(index: Int, name: String) {
+    fun registerAndAssign(index: Int, name: String, count: Int = 1) {
         val trimmed = name.trim()
         if (trimmed.isEmpty()) return
         viewModelScope.launch {
-            val id = repository.registerDie(trimmed)
+            val id = repository.registerDie(trimmed, count)
             updateDie(index) { it.copy(dieId = id) }
         }
     }
 
-    /** Registers a new die from the palette and makes it the active selection. */
-    fun registerAndSetActive(name: String) {
+    /** Registers a new die (or pool, when [count] > 1) from the palette and makes it active. */
+    fun registerAndSetActive(name: String, count: Int = 1) {
         val trimmed = name.trim()
         if (trimmed.isEmpty()) return
         viewModelScope.launch {
-            val id = repository.registerDie(trimmed)
+            val id = repository.registerDie(trimmed, count)
             _uiState.update { if (it is DetectionUiState.Ready) it.copy(activeDieId = id) else it }
         }
     }

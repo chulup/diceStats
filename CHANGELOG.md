@@ -95,5 +95,29 @@ calibrate against real labelled rolls.
 
 After step 5 the MVP was feature-complete. v2/v3 features (Games, Die Groups, Players)
 follow per DESIGN.md.
+
+## Post-MVP
+
+### Die pools — interchangeable dice without individual identity (2026-07)
+
+Design: DESIGN.md "Die Pools" + `design-records/2026-07-05-dice-pools.md`. A pool is
+one `Die` row with `count > 1` (an upper bound); storage keeps one `DieResult` per
+detected die, sharing the pool's `dieId`.
+
+- [x] Schema v4: `dice.count` (default 1), `games.usesDicePools` (default 0).
+- [x] Register-die dialog count stepper; "×N" on dice list + palette chips
+      (`ui/DieDisplayName.kt`); "uses dice pools" switch on the start-game dialog.
+- [x] Confirm screen: per-roll capacity in `canSave` (≤ `count` boxes per die,
+      fewer is fine), at-capacity palette chips grayed out and unselectable,
+      active-die highlight stays on a pool until its capacity is used
+      (`activeDieAfterAssignment`), pools join colour auto-assign only when the
+      active game uses pools, overflow guesses capped by confidence
+      (`capAutoAssignments`). Pure logic under `DetectionLogicTest`.
+- [x] Pool stats: "×N" title, "N throws across M rolls" line
+      (`COUNT(DISTINCT rollId)`), "pooled across N dice" fairness caption.
+
+**Done:** a Risk session registers "Red ×3" / "Blue ×2" once; each roll photo is
+confirmed with three taps or auto-assignment, and the pool pages show pooled
+distributions with an honest pool-level fairness verdict.
 </content>
 </invoke>

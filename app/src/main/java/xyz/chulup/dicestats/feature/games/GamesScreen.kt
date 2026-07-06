@@ -2,7 +2,9 @@ package xyz.chulup.dicestats.feature.games
 
 import android.text.format.DateUtils
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -23,6 +25,7 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -94,9 +97,9 @@ fun GamesScreen(
 
     if (showStartDialog) {
         StartGameDialog(
-            onConfirm = { name ->
+            onConfirm = { name, usesDicePools ->
                 showStartDialog = false
-                viewModel.startGame(name)
+                viewModel.startGame(name, usesDicePools)
             },
             onDismiss = { showStartDialog = false },
         )
@@ -146,27 +149,47 @@ private fun GameItem(game: GameRow, onClick: () -> Unit, onFinish: () -> Unit) {
     )
 }
 
-/** Name-entry dialog for starting a new game. */
+/** Name-entry dialog for starting a new game, with the dice-pools opt-in. */
 @Composable
 private fun StartGameDialog(
-    onConfirm: (String) -> Unit,
+    onConfirm: (String, Boolean) -> Unit,
     onDismiss: () -> Unit,
 ) {
     var name by remember { mutableStateOf("") }
+    var usesDicePools by remember { mutableStateOf(false) }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.game_start)) },
         text = {
-            OutlinedTextField(
-                value = name,
-                onValueChange = { name = it },
-                singleLine = true,
-                label = { Text(stringResource(R.string.game_name_hint)) },
-            )
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    singleLine = true,
+                    label = { Text(stringResource(R.string.game_name_hint)) },
+                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.clickable { usesDicePools = !usesDicePools },
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(stringResource(R.string.game_uses_pools))
+                        Text(
+                            text = stringResource(R.string.game_uses_pools_desc),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(
+                        checked = usesDicePools,
+                        onCheckedChange = { usesDicePools = it },
+                    )
+                }
+            }
         },
         confirmButton = {
             TextButton(
-                onClick = { onConfirm(name) },
+                onClick = { onConfirm(name, usesDicePools) },
                 enabled = name.isNotBlank(),
             ) { Text(stringResource(R.string.game_start)) }
         },

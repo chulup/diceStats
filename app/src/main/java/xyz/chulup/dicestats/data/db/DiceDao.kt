@@ -26,6 +26,10 @@ interface DieDao {
     @Query("SELECT value FROM die_results WHERE dieId = :dieId")
     fun observeValuesForDie(dieId: Long): Flow<List<Int>>
 
+    /** Distinct rolls a die appears in — diverges from the result count for pools. */
+    @Query("SELECT COUNT(DISTINCT rollId) FROM die_results WHERE dieId = :dieId")
+    fun observeRollCountForDie(dieId: Long): Flow<Int>
+
     @Query("SELECT * FROM dice WHERE id = :dieId")
     suspend fun getById(dieId: Long): DieEntity?
 
@@ -79,6 +83,9 @@ interface GameDao {
 
     @Query("SELECT id FROM games WHERE endedAt IS NULL ORDER BY startedAt DESC LIMIT 1")
     suspend fun activeGameId(): Long?
+
+    @Query("SELECT * FROM games WHERE endedAt IS NULL ORDER BY startedAt DESC LIMIT 1")
+    suspend fun getActive(): GameEntity?
 
     @Query("UPDATE games SET endedAt = :endedAt WHERE id = :id")
     suspend fun finish(id: Long, endedAt: Long)

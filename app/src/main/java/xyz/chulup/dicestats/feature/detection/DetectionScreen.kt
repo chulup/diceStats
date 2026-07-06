@@ -59,6 +59,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
@@ -80,6 +81,7 @@ import coil.compose.AsyncImage
 import xyz.chulup.dicestats.R
 import xyz.chulup.dicestats.data.db.DieEntity
 import xyz.chulup.dicestats.recognition.BoundingBox
+import xyz.chulup.dicestats.ui.displayName
 import java.io.File
 import android.graphics.Color as AndroidColor
 import android.graphics.Paint as AndroidPaint
@@ -195,11 +197,11 @@ private fun ConfirmContent(
     state: DetectionUiState.Ready,
     onValueChange: (Int, Int) -> Unit,
     onAssign: (Int, Long) -> Unit,
-    onRegister: (Int, String) -> Unit,
+    onRegister: (Int, String, Int) -> Unit,
     onRemove: (Int) -> Unit,
     onIdentify: (Int) -> Unit,
     onSelectActive: (Long) -> Unit,
-    onRegisterActive: (String) -> Unit,
+    onRegisterActive: (String, Int) -> Unit,
     onDetectRegion: (BoundingBox) -> Unit,
 ) {
     val nameFor: (Long?) -> String? = { id ->
@@ -314,6 +316,7 @@ private fun ConfirmContent(
         DicePalette(
             recentDice = state.recentDice,
             activeDieId = state.activeDieId,
+            fullDieIds = state.atCapacityDieIds,
             onSelect = onSelectActive,
             onRegister = onRegisterActive,
             modifier = Modifier.fillMaxWidth(),
@@ -331,7 +334,7 @@ private fun ConfirmContent(
                 registeredDice = state.registeredDice,
                 onValueChange = { onValueChange(index, it) },
                 onAssign = { onAssign(index, it) },
-                onRegister = { onRegister(index, it) },
+                onRegister = { name, count -> onRegister(index, name, count) },
                 onRemove = { onRemove(index) },
             )
         }
@@ -352,7 +355,7 @@ private fun DieRow(
     registeredDice: List<DieEntity>,
     onValueChange: (Int) -> Unit,
     onAssign: (Long) -> Unit,
-    onRegister: (String) -> Unit,
+    onRegister: (String, Int) -> Unit,
     onRemove: () -> Unit,
 ) {
     var showRegisterDialog by remember { mutableStateOf(false) }
@@ -399,7 +402,7 @@ private fun DieRow(
                 ) {
                     registeredDice.forEach { registered ->
                         DropdownMenuItem(
-                            text = { Text(registered.name) },
+                            text = { Text(registered.displayName()) },
                             onClick = {
                                 onAssign(registered.id)
                                 dropdownExpanded = false
@@ -421,30 +424,56 @@ private fun DieRow(
     if (showRegisterDialog) {
         RegisterDieDialog(
             onDismiss = { showRegisterDialog = false },
-            onConfirm = { name ->
+            onConfirm = { name, count ->
                 showRegisterDialog = false
-                onRegister(name)
+                onRegister(name, count)
             },
         )
     }
 }
 
 @Composable
-private fun RegisterDieDialog(onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
+private fun RegisterDieDialog(onDismiss: () -> Unit, onConfirm: (String, Int) -> Unit) {
     var name by remember { mutableStateOf("") }
+    var count by remember { mutableStateOf(1) }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.confirm_register_title)) },
         text = {
-            OutlinedTextField(
-                value = name,
-                onValueChange = { name = it },
-                singleLine = true,
-                label = { Text(stringResource(R.string.confirm_die_name)) },
-            )
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    singleLine = true,
+                    label = { Text(stringResource(R.string.confirm_die_name)) },
+                )
+                // >1 registers a pool of interchangeable dice (DESIGN.md "Die Pools").
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = stringResource(R.string.confirm_die_count),
+                        modifier = Modifier.weight(1f),
+                    )
+                    IconButton(
+                        onClick = { count-- },
+                        enabled = count > 1,
+                    ) {
+                        Icon(
+                            Icons.Default.Remove,
+                            contentDescription = stringResource(R.string.confirm_die_count_decrement),
+                        )
+                    }
+                    Text(text = count.toString())
+                    IconButton(onClick = { count++ }) {
+                        Icon(
+                            Icons.Default.Add,
+                            contentDescription = stringResource(R.string.confirm_die_count_increment),
+                        )
+                    }
+                }
+            }
         },
         confirmButton = {
-            TextButton(onClick = { onConfirm(name) }, enabled = name.isNotBlank()) {
+            TextButton(onClick = { onConfirm(name, count) }, enabled = name.isNotBlank()) {
                 Text(stringResource(R.string.confirm_register_action))
             }
         },
@@ -458,14 +487,16 @@ private fun RegisterDieDialog(onDismiss: () -> Unit, onConfirm: (String) -> Unit
  * Recent registered dice as a horizontal carousel below the photo. The highlighted
  * die is the one the next tapped box will be identified as; the strip scrolls to
  * keep it in view as the selection advances. Tapping a chip makes it active, and
- * "New die" registers one and makes it active.
+ * "New die" registers one and makes it active. Dice already assigned to as many
+ * boxes as they have physical dice ([fullDieIds]) are grayed out and unselectable.
  */
 @Composable
 private fun DicePalette(
     recentDice: List<DieEntity>,
     activeDieId: Long?,
+    fullDieIds: Set<Long>,
     onSelect: (Long) -> Unit,
-    onRegister: (String) -> Unit,
+    onRegister: (String, Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var showRegisterDialog by remember { mutableStateOf(false) }
@@ -491,18 +522,20 @@ private fun DicePalette(
         ) {
             items(recentDice, key = { it.id }) { die ->
                 val active = die.id == activeDieId
+                val full = die.id in fullDieIds
                 val container =
                     if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
                 val content =
                     if (active) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
                 Box(
                     modifier = Modifier
+                        .alpha(if (full) 0.4f else 1f)
                         .clip(RoundedCornerShape(16.dp))
                         .background(container)
-                        .clickable { onSelect(die.id) }
+                        .clickable(enabled = !full) { onSelect(die.id) }
                         .padding(horizontal = 16.dp, vertical = 10.dp),
                 ) {
-                    Text(text = die.name, color = content)
+                    Text(text = die.displayName(), color = content)
                 }
             }
             item {
@@ -518,9 +551,9 @@ private fun DicePalette(
     if (showRegisterDialog) {
         RegisterDieDialog(
             onDismiss = { showRegisterDialog = false },
-            onConfirm = { name ->
+            onConfirm = { name, count ->
                 showRegisterDialog = false
-                onRegister(name)
+                onRegister(name, count)
             },
         )
     }
