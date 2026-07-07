@@ -74,6 +74,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -84,6 +85,7 @@ import xyz.chulup.dicestats.data.db.DieEntity
 import xyz.chulup.dicestats.recognition.BoundingBox
 import xyz.chulup.dicestats.ui.displayName
 import java.io.File
+import kotlin.math.roundToInt
 import android.graphics.Color as AndroidColor
 import android.graphics.Paint as AndroidPaint
 
@@ -268,9 +270,14 @@ private fun ConfirmContent(
             val areaHeight = maxHeight
             val viewportW = constraints.maxWidth.toFloat()
             val viewportH = constraints.maxHeight.toFloat()
+            // Maps a normalized image coord to a screen pixel with the same transform the
+            // photo's graphicsLayer uses (scale about centre, then pan) — for the on-photo UI
+            // (outlines, labels, remove badges) drawn outside that layer at a constant size.
+            val screenX = { nx: Float -> viewportW / 2f + scale * (nx * viewportW - viewportW / 2f) + offset.x }
+            val screenY = { ny: Float -> viewportH / 2f + scale * (ny * viewportH - viewportH / 2f) + offset.y }
 
-            // The photo, overlay and per-die targets transform together, so taps stay
-            // aligned at any zoom without per-box math.
+            // The photo and the invisible per-die tap/drag targets transform together, so
+            // hits stay aligned at any zoom without per-box math.
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -285,12 +292,6 @@ private fun ConfirmContent(
                     model = File(state.photoPath),
                     contentDescription = stringResource(R.string.detection_photo_desc),
                     contentScale = ContentScale.FillBounds,
-                    modifier = Modifier.fillMaxSize(),
-                )
-                DiceOverlay(
-                    dice = state.dice,
-                    nameFor = nameFor,
-                    highlightIndex = state.recentlyAddedIndex,
                     modifier = Modifier.fillMaxSize(),
                 )
 
@@ -313,20 +314,32 @@ private fun ConfirmContent(
                             },
                     )
                 }
+            }
 
-                // A tappable remove badge just to the right of each box (kept clear of
-                // the die so it doesn't hide it).
-                state.dice.forEachIndexed { index, die ->
-                    val box = die.boundingBox
-                    val rawX = areaWidth * box.right + 4.dp
-                    val badgeX = if (rawX > areaWidth - BADGE_SIZE) areaWidth - BADGE_SIZE else rawX
-                    val rawY = areaHeight * ((box.top + box.bottom) / 2f) - BADGE_SIZE / 2
-                    val badgeY = if (rawY < 0.dp) 0.dp else rawY
-                    RemoveBadge(
-                        onClick = { onRemove(index) },
-                        modifier = Modifier.offset(x = badgeX, y = badgeY),
-                    )
-                }
+            // On-photo UI drawn OUTSIDE the zoom layer so line thickness, text and badges keep
+            // a constant screen size; each is placed by running its box through screenX/screenY
+            // so it stays pinned to its die at any zoom.
+            DiceOverlay(
+                dice = state.dice,
+                nameFor = nameFor,
+                highlightIndex = state.recentlyAddedIndex,
+                zoom = scale,
+                pan = offset,
+                modifier = Modifier.fillMaxSize(),
+            )
+
+            // A tappable remove badge just to the right of each box (kept clear of the die).
+            val badgePx = with(LocalDensity.current) { BADGE_SIZE.toPx() }
+            val gapPx = with(LocalDensity.current) { 4.dp.toPx() }
+            state.dice.forEachIndexed { index, die ->
+                val box = die.boundingBox
+                val x = (screenX(box.right) + gapPx).coerceIn(0f, viewportW - badgePx)
+                val yCenter = (screenY(box.top) + screenY(box.bottom)) / 2f
+                val y = (yCenter - badgePx / 2f).coerceIn(0f, viewportH - badgePx)
+                RemoveBadge(
+                    onClick = { onRemove(index) },
+                    modifier = Modifier.offset { IntOffset(x.roundToInt(), y.roundToInt()) },
+                )
             }
 
             // Re-detect on the framed region (overlaid, not transformed).
@@ -642,18 +655,29 @@ private fun DiceOverlay(
     dice: List<DieAssignment>,
     nameFor: (Long?) -> String?,
     highlightIndex: Int? = null,
+    zoom: Float = 1f,
+    pan: Offset = Offset.Zero,
     modifier: Modifier = Modifier,
 ) {
     val density = LocalDensity.current
     Canvas(modifier = modifier) {
+        // Drawn outside the photo's zoom layer: stroke and text are plain screen pixels
+        // (no counter-scaling). Each normalized coordinate is mapped to the screen with the
+        // same transform the graphicsLayer applies to the photo — scale about the centre,
+        // then pan — so the outline stays pinned to its die at any zoom.
         val strokeWidth = 3.dp.toPx()
         val labelSize = with(density) { 15.sp.toPx() }
+        val cx = size.width / 2f
+        val cy = size.height / 2f
+        fun screenX(nx: Float) = cx + zoom * (nx * size.width - cx) + pan.x
+        fun screenY(ny: Float) = cy + zoom * (ny * size.height - cy) + pan.y
+
         dice.forEachIndexed { index, die ->
             val box = die.boundingBox
-            val left = box.left * size.width
-            val top = box.top * size.height
-            val w = box.width * size.width
-            val h = box.height * size.height
+            val left = screenX(box.left)
+            val top = screenY(box.top)
+            val w = screenX(box.right) - left
+            val h = screenY(box.bottom) - top
             // Green once a value is established (read or user-set); amber flags an
             // unresolved region to review.
             val color = if (die.hasValue) recognizedDieColor else unknownDieColor
