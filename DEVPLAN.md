@@ -148,6 +148,15 @@ Unprioritized; capture now, schedule later.
   on. Combined with v1's drop/correct edits, this yields a labelled corpus of both
   false positives and false negatives — the misses are the most valuable training signal,
   and the resulting boxes/values can graduate straight into `photos/tests.txt` fixtures.
+- **Re-process reported photos as the algorithm improves.** A workflow to re-run the
+  full detection + recognition suite over the device's `unrecognized/` reported
+  captures (e.g. after a pipeline change). Each re-run result is presented for review;
+  when the user judges it good, **promote the photo and its detected dice into the DB
+  as a real roll** (same schema as a confirmed capture) and clear it from `reported`.
+  Otherwise **leave it in `reported`** so it's re-tried on a future update. This turns
+  the reported backlog into a self-clearing queue: it recovers rolls that were once
+  unreadable *and* gives a direct read on whether an algorithm change fixes real misses
+  — the failures the DB benchmark structurally can't see (they never made it into the DB).
 
 ### Confirmation UX
 - **On-photo value steppers.** Show the +/− value buttons directly below the
