@@ -3,7 +3,8 @@ package xyz.chulup.dicestats.feature.detection
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.lazy.LazyRow
@@ -70,6 +71,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.pluralStringResource
@@ -295,8 +297,11 @@ private fun ConfirmContent(
                     modifier = Modifier.fillMaxSize(),
                 )
 
-                // Tapping a die identifies it as the active palette die; dragging it
-                // repositions the box (deltas are in content px → normalized by viewport).
+                // One gesture per box: tap identifies it as the active palette die, drag
+                // repositions it. The initial touch is consumed so the photo's pan/zoom
+                // underneath can't steal a drag that starts on a box when zoomed in. Deltas
+                // are in the box's local (un-zoomed) space, so dividing by the viewport gives
+                // the normalized move at any zoom.
                 state.dice.forEachIndexed { index, die ->
                     val box = die.boundingBox
                     Box(
@@ -304,12 +309,31 @@ private fun ConfirmContent(
                             .offset(x = areaWidth * box.left, y = areaHeight * box.top)
                             .size(width = areaWidth * box.width, height = areaHeight * box.height)
                             .pointerInput(index) {
-                                detectTapGestures { onIdentify(index) }
-                            }
-                            .pointerInput(index) {
-                                detectDragGestures { change, dragAmount ->
-                                    change.consume()
-                                    onMoveDie(index, dragAmount.x / viewportW, dragAmount.y / viewportH)
+                                awaitEachGesture {
+                                    val down = awaitFirstDown()
+                                    down.consume()
+                                    val slop = viewConfiguration.touchSlop
+                                    var moved = false
+                                    // Accumulate from the down point: a slow drag arrives as
+                                    // many sub-slop deltas, so the *total* must cross the slop,
+                                    // not any single event's delta.
+                                    var travel = Offset.Zero
+                                    while (true) {
+                                        val event = awaitPointerEvent()
+                                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                                        if (!change.pressed) break
+                                        val delta = change.positionChange()
+                                        if (!moved) {
+                                            travel += delta
+                                            if (travel.getDistance() < slop) continue
+                                            moved = true
+                                            onMoveDie(index, travel.x / viewportW, travel.y / viewportH)
+                                        } else {
+                                            onMoveDie(index, delta.x / viewportW, delta.y / viewportH)
+                                        }
+                                        change.consume()
+                                    }
+                                    if (!moved) onIdentify(index)
                                 }
                             },
                     )
