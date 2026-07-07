@@ -3,6 +3,7 @@ package xyz.chulup.dicestats.feature.detection
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.lazy.LazyRow
@@ -187,6 +188,7 @@ fun DetectionScreen(
                     onRegisterActive = viewModel::registerAndSetActive,
                     onDetectRegion = viewModel::detectInRegion,
                     onAddDieAt = viewModel::addDieAt,
+                    onMoveDie = viewModel::moveDie,
                 )
             }
         }
@@ -205,6 +207,7 @@ private fun ConfirmContent(
     onRegisterActive: (String, Int) -> Unit,
     onDetectRegion: (BoundingBox) -> Unit,
     onAddDieAt: (Float, Float) -> Unit,
+    onMoveDie: (Int, Float, Float) -> Unit,
 ) {
     val nameFor: (Long?) -> String? = { id ->
         id?.let { dieId -> state.registeredDice.firstOrNull { it.id == dieId }?.name }
@@ -291,14 +294,23 @@ private fun ConfirmContent(
                     modifier = Modifier.fillMaxSize(),
                 )
 
-                // Tapping a die identifies it as the active palette die.
+                // Tapping a die identifies it as the active palette die; dragging it
+                // repositions the box (deltas are in content px → normalized by viewport).
                 state.dice.forEachIndexed { index, die ->
                     val box = die.boundingBox
                     Box(
                         modifier = Modifier
                             .offset(x = areaWidth * box.left, y = areaHeight * box.top)
                             .size(width = areaWidth * box.width, height = areaHeight * box.height)
-                            .clickable { onIdentify(index) },
+                            .pointerInput(index) {
+                                detectTapGestures { onIdentify(index) }
+                            }
+                            .pointerInput(index) {
+                                detectDragGestures { change, dragAmount ->
+                                    change.consume()
+                                    onMoveDie(index, dragAmount.x / viewportW, dragAmount.y / viewportH)
+                                }
+                            },
                     )
                 }
 

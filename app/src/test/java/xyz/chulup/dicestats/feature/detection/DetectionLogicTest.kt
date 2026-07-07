@@ -368,6 +368,26 @@ class DetectionLogicTest {
     }
 
     @Test
+    fun translateBoxClamped_shiftsWithinTheImage() {
+        val box = BoundingBox(0.40f, 0.40f, 0.50f, 0.60f) // 0.10 × 0.20
+        val moved = translateBoxClamped(box, dx = 0.10f, dy = -0.05f)
+        assertEquals(0.50f, moved.left, 1e-5f)
+        assertEquals(0.35f, moved.top, 1e-5f)
+        assertEquals(0.60f, moved.right, 1e-5f)
+        assertEquals(0.55f, moved.bottom, 1e-5f)
+    }
+
+    @Test
+    fun translateBoxClamped_parksAgainstTheEdge_preservingSize() {
+        val box = BoundingBox(0.80f, 0.80f, 0.90f, 0.95f) // 0.10 × 0.15
+        val moved = translateBoxClamped(box, dx = 0.50f, dy = 0.50f) // way past bottom-right
+        assertEquals(1f, moved.right, 1e-5f)
+        assertEquals(1f, moved.bottom, 1e-5f)
+        assertEquals(0.10f, moved.width, 1e-5f)
+        assertEquals(0.15f, moved.height, 1e-5f)
+    }
+
+    @Test
     fun pickAddedDetection_returnsNull_whenOnlyPipSizedSpecksRemain() {
         // A white die that never segments: only pip specks come back → caller uses a placeholder.
         val existing = listOf(BoundingBox(0.10f, 0.10f, 0.20f, 0.20f))

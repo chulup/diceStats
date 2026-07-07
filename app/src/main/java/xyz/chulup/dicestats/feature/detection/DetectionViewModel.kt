@@ -208,6 +208,17 @@ internal fun placeholderBoxAround(
     return centeredBox(cx, cy, halfW.coerceIn(0.01f, 0.5f), halfH.coerceIn(0.01f, 0.5f))
 }
 
+/**
+ * Shifts [box] by ([dx],[dy]) in normalized coords, clamped so the whole box stays within
+ * the image — the box is translated (size preserved), not clipped, so dragging past an edge
+ * simply parks it against that edge.
+ */
+internal fun translateBoxClamped(box: BoundingBox, dx: Float, dy: Float): BoundingBox {
+    val nx = (box.left + dx).coerceIn(0f, 1f - box.width)
+    val ny = (box.top + dy).coerceIn(0f, 1f - box.height)
+    return BoundingBox(nx, ny, nx + box.width, ny + box.height)
+}
+
 /** Maps a box in [window]-local normalized coords back to full-image normalized coords. */
 internal fun mapBoxFromWindow(box: BoundingBox, window: BoundingBox) = BoundingBox(
     left = window.left + box.left * window.width,
@@ -596,6 +607,14 @@ class DetectionViewModel @Inject constructor(
             state.copy(dice = state.dice.filterIndexed { i, _ -> i != index })
         }
     }
+
+    /**
+     * Drags a die's box by ([dx],[dy]) (normalized deltas) so the user can center it over a
+     * die the detector boxed loosely — or place a long-press placeholder precisely. Clamped
+     * to the image; size is preserved.
+     */
+    fun moveDie(index: Int, dx: Float, dy: Float) =
+        updateDie(index) { it.copy(boundingBox = translateBoxClamped(it.boundingBox, dx, dy)) }
 
     fun assignDie(index: Int, dieId: Long) = updateDie(index) { it.copy(dieId = dieId) }
 
