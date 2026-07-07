@@ -186,6 +186,7 @@ fun DetectionScreen(
                     onSelectActive = viewModel::selectActiveDie,
                     onRegisterActive = viewModel::registerAndSetActive,
                     onDetectRegion = viewModel::detectInRegion,
+                    onAddDieAt = viewModel::addDieAt,
                 )
             }
         }
@@ -203,6 +204,7 @@ private fun ConfirmContent(
     onSelectActive: (Long) -> Unit,
     onRegisterActive: (String, Int) -> Unit,
     onDetectRegion: (BoundingBox) -> Unit,
+    onAddDieAt: (Float, Float) -> Unit,
 ) {
     val nameFor: (Long?) -> String? = { id ->
         id?.let { dieId -> state.registeredDice.firstOrNull { it.id == dieId }?.name }
@@ -241,10 +243,22 @@ private fun ConfirmContent(
                     }
                 }
                 .pointerInput(Unit) {
-                    detectTapGestures(onDoubleTap = {
-                        scale = 1f
-                        offset = Offset.Zero
-                    })
+                    detectTapGestures(
+                        // Long-press a spot the detector missed to re-detect there and add
+                        // the die. Invert the graphicsLayer transform (scale about centre,
+                        // then pan) to recover the normalized image point under the finger.
+                        onLongPress = { pos ->
+                            val vw = size.width.toFloat()
+                            val vh = size.height.toFloat()
+                            val ix = (0.5f + (pos.x - offset.x - vw / 2f) / (scale * vw)).coerceIn(0f, 1f)
+                            val iy = (0.5f + (pos.y - offset.y - vh / 2f) / (scale * vh)).coerceIn(0f, 1f)
+                            onAddDieAt(ix, iy)
+                        },
+                        onDoubleTap = {
+                            scale = 1f
+                            offset = Offset.Zero
+                        },
+                    )
                 },
         ) {
             val areaWidth = maxWidth
@@ -270,7 +284,12 @@ private fun ConfirmContent(
                     contentScale = ContentScale.FillBounds,
                     modifier = Modifier.fillMaxSize(),
                 )
-                DiceOverlay(dice = state.dice, nameFor = nameFor, modifier = Modifier.fillMaxSize())
+                DiceOverlay(
+                    dice = state.dice,
+                    nameFor = nameFor,
+                    highlightIndex = state.recentlyAddedIndex,
+                    modifier = Modifier.fillMaxSize(),
+                )
 
                 // Tapping a die identifies it as the active palette die.
                 state.dice.forEachIndexed { index, die ->
@@ -610,6 +629,7 @@ private fun RemoveBadge(onClick: () -> Unit, modifier: Modifier = Modifier) {
 private fun DiceOverlay(
     dice: List<DieAssignment>,
     nameFor: (Long?) -> String?,
+    highlightIndex: Int? = null,
     modifier: Modifier = Modifier,
 ) {
     val density = LocalDensity.current
@@ -630,7 +650,8 @@ private fun DiceOverlay(
                 color = color,
                 topLeft = Offset(left, top),
                 size = Size(w, h),
-                style = Stroke(width = strokeWidth),
+                // Thicken the box just added via long-press so the user sees the tap landed.
+                style = Stroke(width = if (index == highlightIndex) strokeWidth * 2f else strokeWidth),
             )
 
             // Chip above the box shows the assigned die name (or the index until

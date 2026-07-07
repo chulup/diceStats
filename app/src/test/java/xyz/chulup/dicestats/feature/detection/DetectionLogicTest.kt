@@ -258,4 +258,123 @@ class DetectionLogicTest {
         // 5120 -> 2560 -> 1280, two halvings.
         assertEquals(4, sampleSizeFor(width = 5120, height = 3840, targetMaxEdge = 1280))
     }
+
+    // --- add-a-missed-die geometry ----------------------------------------------
+
+    @Test
+    fun median_handlesOddAndEvenCounts() {
+        assertEquals(2f, median(listOf(3f, 1f, 2f)), 1e-6f)
+        assertEquals(2.5f, median(listOf(1f, 2f, 3f, 4f)), 1e-6f)
+        assertEquals(0f, median(emptyList()), 1e-6f)
+    }
+
+    @Test
+    fun boxIou_isZeroWhenDisjoint_andOneWhenIdentical() {
+        val a = BoundingBox(0f, 0f, 0.2f, 0.2f)
+        val b = BoundingBox(0.5f, 0.5f, 0.7f, 0.7f)
+        assertEquals(0f, boxIou(a, b), 1e-6f)
+        assertEquals(1f, boxIou(a, a), 1e-6f)
+    }
+
+    @Test
+    fun detectionWindow_sizesToAFewDiceAcross_whenDiceExist() {
+        // A single 0.10-wide, 0.20-tall die → half-extents 0.15 × 0.30 (×1.5), clamped ≤0.5.
+        val die = BoundingBox(0.40f, 0.30f, 0.50f, 0.50f)
+        val w = detectionWindowAround(cx = 0.45f, cy = 0.40f, dice = listOf(die), aspectRatio = 1f)
+        assertEquals(0.30f, w.left, 1e-5f)
+        assertEquals(0.60f, w.right, 1e-5f)
+        assertEquals(0.10f, w.top, 1e-5f)
+        assertEquals(0.70f, w.bottom, 1e-5f)
+    }
+
+    @Test
+    fun detectionWindow_fallsBackToFrameFraction_keptPixelSquare_whenNoDice() {
+        // No dice: half-width 0.10, half-height 0.10 * aspectRatio (2.0) = 0.20.
+        val w = detectionWindowAround(cx = 0.5f, cy = 0.5f, dice = emptyList(), aspectRatio = 2f)
+        assertEquals(0.40f, w.left, 1e-5f)
+        assertEquals(0.60f, w.right, 1e-5f)
+        assertEquals(0.30f, w.top, 1e-5f)
+        assertEquals(0.70f, w.bottom, 1e-5f)
+    }
+
+    @Test
+    fun detectionWindow_clipsAtTheEdgeForCornerTaps() {
+        val die = BoundingBox(0f, 0f, 0.10f, 0.10f)
+        val w = detectionWindowAround(cx = 0.02f, cy = 0.02f, dice = listOf(die), aspectRatio = 1f)
+        assertEquals(0f, w.left, 1e-5f)
+        assertEquals(0f, w.top, 1e-5f)
+    }
+
+    @Test
+    fun mapBoxFromWindow_placesLocalBoxIntoFullImageCoords() {
+        val window = BoundingBox(0.20f, 0.40f, 0.60f, 0.80f) // 0.40 × 0.40
+        val local = BoundingBox(0.25f, 0.50f, 0.75f, 1.0f)
+        val full = mapBoxFromWindow(local, window)
+        assertEquals(0.20f + 0.25f * 0.40f, full.left, 1e-5f)
+        assertEquals(0.40f + 0.50f * 0.40f, full.top, 1e-5f)
+        assertEquals(0.20f + 0.75f * 0.40f, full.right, 1e-5f)
+        assertEquals(0.40f + 1.0f * 0.40f, full.bottom, 1e-5f)
+    }
+
+    @Test
+    fun pickAddedDetection_prefersTheBoxContainingTheTap() {
+        val near = BoundingBox(0.40f, 0.40f, 0.50f, 0.50f) // contains (0.45,0.45)
+        val far = BoundingBox(0.80f, 0.80f, 0.90f, 0.90f)
+        val pick = pickAddedDetection(
+            listOf(far, near), values = listOf(3, 3), existing = emptyList(), cx = 0.45f, cy = 0.45f,
+        )
+        assertEquals(1, pick)
+    }
+
+    @Test
+    fun pickAddedDetection_dropsDuplicatesOfExistingDice() {
+        val dup = BoundingBox(0.40f, 0.40f, 0.50f, 0.50f)
+        val existing = listOf(BoundingBox(0.40f, 0.40f, 0.50f, 0.50f))
+        assertNull(pickAddedDetection(listOf(dup), values = listOf(3), existing, cx = 0.45f, cy = 0.45f))
+    }
+
+    @Test
+    fun pickAddedDetection_fallsToNearestWhenNoneContainTap() {
+        val a = BoundingBox(0.10f, 0.10f, 0.20f, 0.20f) // centre (0.15,0.15)
+        val b = BoundingBox(0.60f, 0.60f, 0.70f, 0.70f) // centre (0.65,0.65)
+        val pick = pickAddedDetection(
+            listOf(a, b), values = listOf(3, 3), existing = emptyList(), cx = 0.62f, cy = 0.62f,
+        )
+        assertEquals(1, pick)
+    }
+
+    @Test
+    fun pickAddedDetection_rejectsPipSizedSpecksNearerThanTheDie() {
+        // Reproduces the white-die log: a tiny unread pip nearer the tap than the real die,
+        // with existing dice at the same physical scale as the one being added.
+        val existing = listOf(BoundingBox(0.30f, 0.30f, 0.341f, 0.324f)) // die ≈ 0.041 × 0.024
+        val pip = BoundingBox(0.590f, 0.553f, 0.608f, 0.566f) // 0.018 × 0.013, a pip
+        val die = BoundingBox(0.594f, 0.571f, 0.635f, 0.595f) // 0.041 × 0.024
+        val pick = pickAddedDetection(
+            listOf(pip, die), values = listOf(null, 3), existing, cx = 0.581f, cy = 0.580f,
+        )
+        assertEquals(1, pick) // the die, not the closer pip
+    }
+
+    @Test
+    fun pickAddedDetection_prefersAReadDieOverAnUnreadBlobOfSimilarSize() {
+        val existing = listOf(BoundingBox(0.0f, 0.0f, 0.10f, 0.10f))
+        val unread = BoundingBox(0.40f, 0.40f, 0.50f, 0.50f) // nearer the tap
+        val read = BoundingBox(0.55f, 0.55f, 0.65f, 0.65f)
+        val pick = pickAddedDetection(
+            listOf(unread, read), values = listOf(null, 4), existing, cx = 0.48f, cy = 0.48f,
+        )
+        assertEquals(1, pick)
+    }
+
+    @Test
+    fun pickAddedDetection_returnsNull_whenOnlyPipSizedSpecksRemain() {
+        // A white die that never segments: only pip specks come back → caller uses a placeholder.
+        val existing = listOf(BoundingBox(0.10f, 0.10f, 0.20f, 0.20f))
+        val pips = listOf(
+            BoundingBox(0.590f, 0.553f, 0.608f, 0.566f),
+            BoundingBox(0.609f, 0.558f, 0.629f, 0.573f),
+        )
+        assertNull(pickAddedDetection(pips, values = listOf(null, null), existing, cx = 0.60f, cy = 0.56f))
+    }
 }

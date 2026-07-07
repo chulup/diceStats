@@ -6,6 +6,7 @@ import android.graphics.BitmapRegionDecoder
 import android.graphics.Matrix
 import android.graphics.Rect
 import android.media.ExifInterface
+import android.util.Log
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -21,6 +22,7 @@ import xyz.chulup.dicestats.recognition.DieIdentifier
 import xyz.chulup.dicestats.recognition.DieRecognizer
 import xyz.chulup.dicestats.recognition.mapOrientedRegionToRaw
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -119,6 +121,140 @@ internal fun capAutoAssignments(
     }
 }
 
+private const val TAG = "DetectionViewModel"
+
+/** Compact `[l,t,r,b]` rendering of a normalized box for diagnostic logs. */
+private fun BoundingBox.log() = "[%.3f,%.3f,%.3f,%.3f]".format(left, top, right, bottom)
+
+// --- Long-press "add a missed die" geometry (pure; unit-tested in DetectionLogicTest) ---
+
+/**
+ * Factor applied per axis to the median detected-die size to size the re-detect window
+ * (≈ this many dice across): wide enough to contain the tapped die with margin, tight
+ * enough not to drag in a crowd of neighbours.
+ */
+private const val WINDOW_DIE_FACTOR = 1.5f
+
+/** Half-window as a fraction of image *width* when there are no dice yet to size against. */
+private const val WINDOW_FALLBACK_HALF = 0.10f
+
+/** A newly detected box overlapping an existing one by more than this IoU is a duplicate. */
+internal const val ADD_DIE_DEDUP_IOU = 0.3f
+
+/**
+ * A detection smaller than this fraction of the median existing die's area is a pip/speck,
+ * not a die, and is rejected — a tight native-res crop makes the classical detector emit a
+ * die's own pips as separate boxes, and those must never be picked over the die itself.
+ */
+internal const val MIN_DIE_AREA_FRACTION = 0.30f
+
+internal fun median(values: List<Float>): Float {
+    if (values.isEmpty()) return 0f
+    val s = values.sorted()
+    val m = s.size / 2
+    return if (s.size % 2 == 1) s[m] else (s[m - 1] + s[m]) / 2f
+}
+
+internal fun boxIou(a: BoundingBox, b: BoundingBox): Float {
+    val left = maxOf(a.left, b.left)
+    val top = maxOf(a.top, b.top)
+    val right = minOf(a.right, b.right)
+    val bottom = minOf(a.bottom, b.bottom)
+    if (right <= left || bottom <= top) return 0f
+    val inter = (right - left) * (bottom - top)
+    return inter / (a.width * a.height + b.width * b.height - inter)
+}
+
+/** A centered [halfW]×[halfH] (normalized) box around ([cx],[cy]), clipped to the image. */
+private fun centeredBox(cx: Float, cy: Float, halfW: Float, halfH: Float) = BoundingBox(
+    left = (cx - halfW).coerceIn(0f, 1f),
+    top = (cy - halfH).coerceIn(0f, 1f),
+    right = (cx + halfW).coerceIn(0f, 1f),
+    bottom = (cy + halfH).coerceIn(0f, 1f),
+)
+
+/**
+ * The region to re-run detection on for a long-press at normalized ([cx],[cy]). Sized to
+ * a few dice across from the median of already-detected [dice]; when none exist yet, a
+ * fixed fraction of the frame kept pixel-square via [aspectRatio] (= width / height).
+ */
+internal fun detectionWindowAround(
+    cx: Float,
+    cy: Float,
+    dice: List<BoundingBox>,
+    aspectRatio: Float,
+): BoundingBox {
+    val (halfW, halfH) = if (dice.isNotEmpty()) {
+        median(dice.map { it.width }) * WINDOW_DIE_FACTOR to
+            median(dice.map { it.height }) * WINDOW_DIE_FACTOR
+    } else {
+        WINDOW_FALLBACK_HALF to WINDOW_FALLBACK_HALF * aspectRatio
+    }
+    return centeredBox(cx, cy, halfW.coerceIn(0.02f, 0.5f), halfH.coerceIn(0.02f, 0.5f))
+}
+
+/** A placeholder box (one median die) centered on the tap, for when detection finds nothing. */
+internal fun placeholderBoxAround(
+    cx: Float,
+    cy: Float,
+    dice: List<BoundingBox>,
+    aspectRatio: Float,
+): BoundingBox {
+    val (halfW, halfH) = if (dice.isNotEmpty()) {
+        median(dice.map { it.width }) / 2f to median(dice.map { it.height }) / 2f
+    } else {
+        WINDOW_FALLBACK_HALF / 2f to WINDOW_FALLBACK_HALF / 2f * aspectRatio
+    }
+    return centeredBox(cx, cy, halfW.coerceIn(0.01f, 0.5f), halfH.coerceIn(0.01f, 0.5f))
+}
+
+/** Maps a box in [window]-local normalized coords back to full-image normalized coords. */
+internal fun mapBoxFromWindow(box: BoundingBox, window: BoundingBox) = BoundingBox(
+    left = window.left + box.left * window.width,
+    top = window.top + box.top * window.height,
+    right = window.left + box.right * window.width,
+    bottom = window.top + box.bottom * window.height,
+)
+
+/**
+ * Of the newly detected [candidates] (full-image coords, with parallel read [values]), the
+ * index of the one to add for a long-press at ([cx],[cy]). In order: reject boxes that
+ * duplicate an [existing] die (IoU > [dedupIou]) or are pip-sized (< [MIN_DIE_AREA_FRACTION]
+ * of the median existing die — a crop makes the detector emit a die's own pips as boxes);
+ * of the survivors prefer those that read a value (a real die over an unread speck); then
+ * prefer a box containing the tap; then take the nearest by centre. Null when nothing
+ * plausible is left — the caller drops a placeholder instead.
+ */
+internal fun pickAddedDetection(
+    candidates: List<BoundingBox>,
+    values: List<Int?>,
+    existing: List<BoundingBox>,
+    cx: Float,
+    cy: Float,
+    dedupIou: Float = ADD_DIE_DEDUP_IOU,
+): Int? {
+    val minArea = if (existing.isNotEmpty()) {
+        median(existing.map { it.width }) * median(existing.map { it.height }) * MIN_DIE_AREA_FRACTION
+    } else {
+        0f
+    }
+    val fresh = candidates.indices.filter { i ->
+        val b = candidates[i]
+        b.width * b.height >= minArea && existing.none { boxIou(it, b) > dedupIou }
+    }
+    if (fresh.isEmpty()) return null
+    // A real die reads pips; an unread blob is likely a pip/speck — prefer the former.
+    val readable = fresh.filter { values[it] != null }
+    val pool = readable.ifEmpty { fresh }
+    val containing = pool.filter { cx in candidates[it].left..candidates[it].right && cy in candidates[it].top..candidates[it].bottom }
+    return containing.ifEmpty { pool }.minByOrNull { i ->
+        val b = candidates[i]
+        val dx = (b.left + b.right) / 2f - cx
+        val dy = (b.top + b.bottom) / 2f - cy
+        dx * dx + dy * dy
+    }
+}
+
 /**
  * Power-of-two `inSampleSize` that keeps the longest edge at or above [targetMaxEdge]
  * (BitmapFactory halves per step), so a decoded bitmap stays large enough to detect on
@@ -149,6 +285,8 @@ sealed interface DetectionUiState {
         val saved: Boolean = false,
         /** True while re-detection on a cropped region is running. */
         val detecting: Boolean = false,
+        /** Box just added via long-press, briefly emphasized on the overlay; cleared after a beat. */
+        val recentlyAddedIndex: Int? = null,
     ) : DetectionUiState {
         /**
          * Every die must be assigned and have a value that's a real face of it, and no
@@ -300,16 +438,102 @@ class DetectionViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Long-press recovery for a die the detector missed: re-runs detection on a small
+     * native-resolution window around the tapped point ([nx],[ny] normalized, display
+     * coords) and merges the found die back into the full-frame results, mapped to image
+     * coordinates. If detection finds nothing there either, it drops an amber placeholder
+     * box on the tap for the user to size and set a value on — so a long-press always adds
+     * a die. Reuses [decodeRegion]'s native-res crop, which is what lets a tighter window
+     * find a die the downscaled full frame missed.
+     */
+    fun addDieAt(nx: Float, ny: Float) {
+        val state = _uiState.value as? DetectionUiState.Ready ?: return
+        if (state.detecting) return
+        val path = currentPhotoPath
+        val existing = state.dice.map { it.boundingBox }
+        val window = detectionWindowAround(nx, ny, existing, state.aspectRatio)
+        Log.i(
+            TAG,
+            "addDieAt: tap=(%.3f,%.3f) window=%s existing=%d".format(nx, ny, window.log(), existing.size),
+        )
+        _uiState.update { (it as DetectionUiState.Ready).copy(detecting = true) }
+        viewModelScope.launch {
+            val added = withContext(Dispatchers.Default) {
+                val crop = decodeRegion(path, window)
+                if (crop == null) {
+                    Log.w(TAG, "addDieAt: crop decode failed for $path -> placeholder")
+                } else {
+                    try {
+                        val detected = recognizer.recognize(crop)
+                        val full = detected.map { mapBoxFromWindow(it.boundingBox, window) }
+                        Log.i(TAG, "addDieAt: window detections=${detected.size}")
+                        full.forEachIndexed { i, b ->
+                            Log.i(TAG, "   det[$i] ${b.log()} value=${detected[i].value}")
+                        }
+                        val pick = pickAddedDetection(full, detected.map { it.value }, existing, nx, ny)
+                        if (pick != null) {
+                            val det = detected[pick]
+                            val signature = colorAnalyzer.signature(crop, det.boundingBox)
+                            val guess = signature
+                                ?.let { identifier.identify(it, identityCandidatesFor(state.registeredDice)) }
+                                ?.takeIf { it.confidence >= DieIdentifier.IDENTITY_CONFIRM_THRESHOLD }
+                            Log.i(
+                                TAG,
+                                "addDieAt: picked det[$pick] ${full[pick].log()} value=${det.value} " +
+                                    "dieId=${guess?.dieId} conf=${guess?.confidence}",
+                            )
+                            return@withContext DieAssignment(
+                                boundingBox = full[pick],
+                                value = det.value ?: DEFAULT_VALUE,
+                                recognizedValue = det.value,
+                                dieId = guess?.dieId,
+                                dieIdConfidence = guess?.confidence,
+                                signature = signature,
+                            )
+                        }
+                        Log.i(
+                            TAG,
+                            "addDieAt: no fresh detection (all ${detected.size} were duplicates/empty) -> placeholder",
+                        )
+                    } finally {
+                        crop.recycle()
+                    }
+                }
+                // Detection found nothing new (or the crop failed): a placeholder to fill in.
+                DieAssignment(
+                    boundingBox = placeholderBoxAround(nx, ny, existing, state.aspectRatio),
+                    value = DEFAULT_VALUE,
+                    recognizedValue = null,
+                    dieId = null,
+                )
+            }
+            Log.i(
+                TAG,
+                "addDieAt: added ${added.boundingBox.log()} value=${added.value} " +
+                    "recognized=${added.recognizedValue} placeholder=${added.recognizedValue == null}",
+            )
+            _uiState.update { current ->
+                if (current !is DetectionUiState.Ready) return@update current
+                val merged = capAutoAssignments(current.dice + added, current.registeredDice)
+                current.copy(dice = merged, detecting = false, recentlyAddedIndex = merged.lastIndex)
+            }
+            launch {
+                delay(ADD_DIE_FLASH_MS)
+                _uiState.update {
+                    if (it is DetectionUiState.Ready) it.copy(recentlyAddedIndex = null) else it
+                }
+            }
+        }
+    }
+
     /** Builds confirm-screen assignments from a freshly detected [bitmap]. */
     private suspend fun buildAssignments(
         bitmap: Bitmap,
         registered: List<DieEntity>,
     ): List<DieAssignment> {
         val detected = recognizer.recognize(bitmap)
-        // Pools are auto-assign candidates only inside a game that opted into them
-        // (DESIGN.md "Die Pools"); individual dice are matched as before.
-        val poolsEnabled = repository.activeGameNow()?.usesDicePools == true
-        val candidates = identityCandidates(registered.filter { poolsEnabled || !it.isPool })
+        val candidates = identityCandidatesFor(registered)
         val assignments = detected.map { det ->
             val signature = colorAnalyzer.signature(bitmap, det.boundingBox)
             val guess = signature
@@ -325,6 +549,15 @@ class DetectionViewModel @Inject constructor(
             )
         }
         return capAutoAssignments(assignments, registered)
+    }
+
+    /**
+     * Identity candidates for matching a crop's colour: pools are candidates only inside a
+     * game that opted into them (DESIGN.md "Die Pools"); individual dice always are.
+     */
+    private suspend fun identityCandidatesFor(registered: List<DieEntity>): List<DieIdentifier.Candidate> {
+        val poolsEnabled = repository.activeGameNow()?.usesDicePools == true
+        return identityCandidates(registered.filter { poolsEnabled || !it.isPool })
     }
 
     private fun identityCandidates(dice: List<DieEntity>): List<DieIdentifier.Candidate> =
@@ -351,6 +584,13 @@ class DetectionViewModel @Inject constructor(
 
     /** Drops a detected die the user judges to be a false positive. */
     fun removeDie(index: Int) {
+        (_uiState.value as? DetectionUiState.Ready)?.dice?.getOrNull(index)?.let { die ->
+            Log.i(
+                TAG,
+                "removeDie: index=$index ${die.boundingBox.log()} value=${die.value} " +
+                    "recognized=${die.recognizedValue} dieId=${die.dieId}",
+            )
+        }
         _uiState.update { state ->
             if (state !is DetectionUiState.Ready) return@update state
             state.copy(dice = state.dice.filterIndexed { i, _ -> i != index })
@@ -554,5 +794,6 @@ class DetectionViewModel @Inject constructor(
         private const val TARGET_MAX_EDGE = 1280
         private const val REGION_TARGET_MAX_EDGE = 1280
         private const val DEFAULT_VALUE = 1
+        private const val ADD_DIE_FLASH_MS = 1500L
     }
 }
