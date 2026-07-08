@@ -73,6 +73,14 @@ Deferred follow-ups (captured, not being thought about now):
 Unprioritized; capture now, schedule later.
 
 ### Recognition
+- **YOLO detector (scaffolding in place — model not yet trained).** Detection can be swapped
+  from classical CV to a trained **YOLO26n** ONNX model run via OpenCV's `dnn` module
+  (`YoloDetectionPipeline` + `YoloDieDetector`, wired in `RecognitionModule`). See
+  `design-records/2026-07-08-yolo-detector-opencv-dnn.md`. **To enable:** train the model, export
+  with `yolo export format=onnx opset=12 imgsz=640`, drop it at
+  `app/src/main/assets/yolo26n-dice.onnx` — asset presence auto-selects it (else classical fallback).
+  Then confirm the export's output shape/class map against `YoloDetectionPipeline.Params` (decode
+  geometry is already covered by `YoloDecodeTest`) and add a `DetectionStatsReport` benchmark config.
 - **Robust detection on bright / multicolored surfaces.** The HSV saturation+value
   segmentation (`DiceDetectionPipeline`) assumes dice are the saturated, bright
   objects against a duller background; bright tabletops, patterned cloths, or

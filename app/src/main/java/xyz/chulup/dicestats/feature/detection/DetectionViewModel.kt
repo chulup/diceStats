@@ -342,13 +342,13 @@ sealed interface DetectionUiState {
 class DetectionViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val repository: DiceRepository,
+    private val recognizer: DieRecognizer,
 ) : ViewModel() {
 
     /** The working photo — starts as the capture, becomes the crop when re-detecting. */
     private var currentPhotoPath: String =
         savedStateHandle.get<String>(ARG_PHOTO_PATH) ?: error("photoPath argument required")
 
-    private val recognizer = DieRecognizer()
     private val colorAnalyzer = DieColorAnalyzer()
     private val identifier = DieIdentifier()
 
