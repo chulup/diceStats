@@ -1,0 +1,33 @@
+<!--
+  Label Studio labeling config — dice object detection.
+
+  Task data field:  {"image": "<url-or-path-to-the-image>"}  (referenced below as $image)
+  Region type:      axis-aligned bounding box, one per die, classed by die TYPE.
+  Matches the COCO dataset from scripts/build_yolo_dataset.py:
+    - RectangleLabels value  <->  COCO category name / annotation "die_type" (d6, d8, ... , die)
+    - per-region Number "value" <-> annotation "value" (pip / face value), optional
+  canRotate="false" keeps regions axis-aligned, like the detector's boxes.
+-->
+<View>
+  <Header value="Draw one box per die; label it by type. Set the face value if you can read it."/>
+
+  <Image name="image" value="$image"
+         zoom="true" zoomControl="true" rotateControl="false"
+         negativeZoom="true" maxWidth="100%"/>
+
+  <RectangleLabels name="label" toName="image" canRotate="false" strokeWidth="2">
+    <Label value="d6"   background="#e6194b" hotkey="1"/>
+    <Label value="d8"   background="#3cb44b" hotkey="2"/>
+    <Label value="d10"  background="#4363d8" hotkey="3"/>
+    <Label value="d12"  background="#f58231" hotkey="4"/>
+    <Label value="d20"  background="#911eb4" hotkey="5"/>
+    <Label value="d100" background="#42d4f4" hotkey="6"/>
+    <!-- Generic fallback for a die whose type you can't/don't want to classify. -->
+    <Label value="die"  background="#a9a9a9" hotkey="0"/>
+  </RectangleLabels>
+
+  <!-- Optional: the rolled face value, recorded per box. A free number generalizes across
+       die types (d6 -> 1..6, d20 -> 1..20). Leave blank when unreadable. -->
+  <Number name="value" toName="image" perRegion="true"
+          min="1" placeholder="face value" slider="false"/>
+</View>

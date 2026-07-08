@@ -77,3 +77,7 @@ scratch_*/
 
 # Raw on-device data pull (DB + full-res roll JPEGs); benchmark fixtures live in androidTest/assets/dbphotos
 /device-pull/
+
+# Local data: device backup + generated training dataset (large binaries)
+backup/
+dataset/
