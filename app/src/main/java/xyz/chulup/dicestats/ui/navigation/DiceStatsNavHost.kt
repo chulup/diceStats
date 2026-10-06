@@ -12,6 +12,7 @@ import xyz.chulup.dicestats.feature.detection.DetectionScreen
 import xyz.chulup.dicestats.feature.dicelist.DiceListScreen
 import xyz.chulup.dicestats.feature.games.GameStatsScreen
 import xyz.chulup.dicestats.feature.games.GamesScreen
+import xyz.chulup.dicestats.feature.manualroll.ManualRollScreen
 import xyz.chulup.dicestats.feature.rolllog.RollLogScreen
 import xyz.chulup.dicestats.feature.stats.DieStatsScreen
 import xyz.chulup.dicestats.feature.stats.RollTotalsScreen
@@ -19,6 +20,7 @@ import xyz.chulup.dicestats.feature.stats.RollTotalsScreen
 object Routes {
     const val ROLL_LOG = "roll_log"
     const val CAPTURE = "capture"
+    const val MANUAL_ROLL = "manual_roll"
     const val DICE_LIST = "dice_list"
     const val ROLL_TOTALS = "roll_totals"
     const val GAMES = "games"
@@ -46,8 +48,12 @@ fun DiceStatsNavHost() {
         composable(Routes.ROLL_LOG) {
             RollLogScreen(
                 onCapture = { navController.navigate(Routes.CAPTURE) },
+                onManualRoll = { navController.navigate(Routes.MANUAL_ROLL) },
                 onDiceStats = { navController.navigate(Routes.DICE_LIST) },
             )
+        }
+        composable(Routes.MANUAL_ROLL) {
+            ManualRollScreen(onBack = { navController.popBackStack() })
         }
         composable(Routes.DICE_LIST) {
             DiceListScreen(

@@ -10,9 +10,11 @@ class DieTypeTest {
 
     @Test
     fun faceValues_perType() {
+        assertEquals((1..4).toList(), DieType.D4.faceValues)
         assertEquals((1..6).toList(), DieType.D6.faceValues)
         assertEquals((1..8).toList(), DieType.D8.faceValues)
         assertEquals((1..10).toList(), DieType.D10.faceValues)
+        assertEquals((1..12).toList(), DieType.D12.faceValues)
         assertEquals((1..20).toList(), DieType.D20.faceValues)
         assertEquals(listOf(0, 10, 20, 30, 40, 50, 60, 70, 80, 90), DieType.D100.faceValues)
     }
@@ -63,10 +65,24 @@ class DieTypeTest {
     }
 
     @Test
+    fun d4AndD12_facesAndValidity() {
+        assertEquals(4, DieType.D4.sides)
+        assertEquals(2.5, DieType.D4.expectedMean, 1e-9)
+        assertTrue(DieType.D4.isValidValue(4))
+        assertFalse(DieType.D4.isValidValue(5))
+        assertEquals(12, DieType.D12.sides)
+        assertEquals(6.5, DieType.D12.expectedMean, 1e-9)
+        assertTrue(DieType.D12.isValidValue(12))
+        assertFalse(DieType.D12.isValidValue(13))
+    }
+
+    @Test
     fun fromFaces_mapsTheDbFacesNumber() {
+        assertEquals(DieType.D4, DieType.fromFaces(4))
         assertEquals(DieType.D6, DieType.fromFaces(6))
         assertEquals(DieType.D8, DieType.fromFaces(8))
         assertEquals(DieType.D10, DieType.fromFaces(10))
+        assertEquals(DieType.D12, DieType.fromFaces(12))
         assertEquals(DieType.D20, DieType.fromFaces(20))
         assertEquals(DieType.D100, DieType.fromFaces(100))
     }

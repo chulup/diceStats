@@ -8,16 +8,18 @@ package xyz.chulup.dicestats.data
  * pip d6 the MVP shipped with.
  *
  * Face values:
- * - d6/d8/d10/d20 are numbered `1..N`.
+ * - d4/d6/d8/d10/d12/d20 are numbered `1..N`.
  * - d100 is the percentile die: ten faces valued `0, 10, … 90`.
  *
  * [faces] is the conventional "N" in *dN* and is what [xyz.chulup.dicestats.data.db.DieEntity]
  * stores (so d100 → 100, even though it physically has ten [sides]); [fromFaces] maps it back.
  */
 enum class DieType(val faces: Int, val faceValues: List<Int>) {
+    D4(4, (1..4).toList()),
     D6(6, (1..6).toList()),
     D8(8, (1..8).toList()),
     D10(10, (1..10).toList()),
+    D12(12, (1..12).toList()),
     D20(20, (1..20).toList()),
     D100(100, (0..9).map { it * 10 }),
     ;

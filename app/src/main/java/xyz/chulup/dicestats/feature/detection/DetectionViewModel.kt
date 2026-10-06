@@ -644,21 +644,21 @@ class DetectionViewModel @Inject constructor(
         }
     }
 
-    fun registerAndAssign(index: Int, name: String, count: Int = 1) {
+    fun registerAndAssign(index: Int, name: String, faces: Int, count: Int = 1) {
         val trimmed = name.trim()
         if (trimmed.isEmpty()) return
         viewModelScope.launch {
-            val id = repository.registerDie(trimmed, count)
+            val id = repository.registerDie(trimmed, faces, count)
             updateDie(index) { it.copy(dieId = id) }
         }
     }
 
     /** Registers a new die (or pool, when [count] > 1) from the palette and makes it active. */
-    fun registerAndSetActive(name: String, count: Int = 1) {
+    fun registerAndSetActive(name: String, faces: Int, count: Int = 1) {
         val trimmed = name.trim()
         if (trimmed.isEmpty()) return
         viewModelScope.launch {
-            val id = repository.registerDie(trimmed, count)
+            val id = repository.registerDie(trimmed, faces, count)
             _uiState.update { if (it is DetectionUiState.Ready) it.copy(activeDieId = id) else it }
         }
     }

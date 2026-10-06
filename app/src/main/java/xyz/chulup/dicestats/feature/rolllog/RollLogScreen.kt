@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -27,13 +28,16 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddAPhoto
 import androidx.compose.material.icons.filled.BarChart
+import androidx.compose.material.icons.filled.Casino
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.SportsEsports
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
@@ -69,6 +73,7 @@ import java.io.File
 @Composable
 fun RollLogScreen(
     onCapture: () -> Unit,
+    onManualRoll: () -> Unit,
     onDiceStats: () -> Unit,
     viewModel: RollLogViewModel = hiltViewModel(),
 ) {
@@ -112,11 +117,16 @@ fun RollLogScreen(
         },
         floatingActionButton = {
             if (!uiState.inSelectionMode) {
-                ExtendedFloatingActionButton(
-                    onClick = onCapture,
-                    icon = { Icon(Icons.Default.AddAPhoto, contentDescription = null) },
-                    text = { Text(stringResource(R.string.roll_log_capture)) },
-                )
+                Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    FloatingActionButton(onClick = onManualRoll) {
+                        Icon(Icons.Default.Edit, contentDescription = stringResource(R.string.roll_log_manual))
+                    }
+                    ExtendedFloatingActionButton(
+                        onClick = onCapture,
+                        icon = { Icon(Icons.Default.AddAPhoto, contentDescription = null) },
+                        text = { Text(stringResource(R.string.roll_log_capture)) },
+                    )
+                }
             }
         },
     ) { padding ->
@@ -316,11 +326,29 @@ private fun RollCell(
             .clip(shape)
             .combinedClickable(onClick = onClick, onLongClick = onLongClick),
     ) {
-        AsyncImage(
-            model = File(roll.roll.photoPath),
-            contentDescription = stringResource(R.string.roll_photo_desc),
-            modifier = Modifier.fillMaxSize(),
-        )
+        val photoPath = roll.roll.photoPath
+        if (photoPath != null) {
+            AsyncImage(
+                model = File(photoPath),
+                contentDescription = stringResource(R.string.roll_photo_desc),
+                modifier = Modifier.fillMaxSize(),
+            )
+        } else {
+            // Manually-entered rolls have no photo: show a tinted dice-icon placeholder.
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.secondaryContainer),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Casino,
+                    contentDescription = stringResource(R.string.roll_manual_desc),
+                    tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                    modifier = Modifier.size(48.dp),
+                )
+            }
+        }
 
         // Summary of recognized values: the individual dice, prefixed by their sum
         // when there's more than one, e.g. "(sum: 7), 3, 4".

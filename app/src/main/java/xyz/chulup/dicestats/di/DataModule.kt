@@ -26,6 +26,7 @@ object DataModule {
                 DiceDatabase.MIGRATION_1_2,
                 DiceDatabase.MIGRATION_2_3,
                 DiceDatabase.MIGRATION_3_4,
+                DiceDatabase.MIGRATION_4_5,
             )
             .build()
 

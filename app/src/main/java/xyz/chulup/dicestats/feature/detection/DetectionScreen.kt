@@ -34,7 +34,6 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Remove
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
@@ -85,6 +84,7 @@ import coil.compose.AsyncImage
 import xyz.chulup.dicestats.R
 import xyz.chulup.dicestats.data.db.DieEntity
 import xyz.chulup.dicestats.recognition.BoundingBox
+import xyz.chulup.dicestats.ui.RegisterDieDialog
 import xyz.chulup.dicestats.ui.displayName
 import java.io.File
 import kotlin.math.roundToInt
@@ -204,11 +204,11 @@ private fun ConfirmContent(
     state: DetectionUiState.Ready,
     onValueChange: (Int, Int) -> Unit,
     onAssign: (Int, Long) -> Unit,
-    onRegister: (Int, String, Int) -> Unit,
+    onRegister: (Int, String, Int, Int) -> Unit,
     onRemove: (Int) -> Unit,
     onIdentify: (Int) -> Unit,
     onSelectActive: (Long) -> Unit,
-    onRegisterActive: (String, Int) -> Unit,
+    onRegisterActive: (String, Int, Int) -> Unit,
     onDetectRegion: (BoundingBox) -> Unit,
     onAddDieAt: (Float, Float) -> Unit,
     onMoveDie: (Int, Float, Float) -> Unit,
@@ -402,7 +402,7 @@ private fun ConfirmContent(
                 registeredDice = state.registeredDice,
                 onValueChange = { onValueChange(index, it) },
                 onAssign = { onAssign(index, it) },
-                onRegister = { name, count -> onRegister(index, name, count) },
+                onRegister = { name, faces, count -> onRegister(index, name, faces, count) },
                 onRemove = { onRemove(index) },
             )
         }
@@ -423,7 +423,7 @@ private fun DieRow(
     registeredDice: List<DieEntity>,
     onValueChange: (Int) -> Unit,
     onAssign: (Long) -> Unit,
-    onRegister: (String, Int) -> Unit,
+    onRegister: (String, Int, Int) -> Unit,
     onRemove: () -> Unit,
 ) {
     var showRegisterDialog by remember { mutableStateOf(false) }
@@ -492,63 +492,12 @@ private fun DieRow(
     if (showRegisterDialog) {
         RegisterDieDialog(
             onDismiss = { showRegisterDialog = false },
-            onConfirm = { name, count ->
+            onConfirm = { name, faces, count ->
                 showRegisterDialog = false
-                onRegister(name, count)
+                onRegister(name, faces, count)
             },
         )
     }
-}
-
-@Composable
-private fun RegisterDieDialog(onDismiss: () -> Unit, onConfirm: (String, Int) -> Unit) {
-    var name by remember { mutableStateOf("") }
-    var count by remember { mutableStateOf(1) }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.confirm_register_title)) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    singleLine = true,
-                    label = { Text(stringResource(R.string.confirm_die_name)) },
-                )
-                // >1 registers a pool of interchangeable dice (DESIGN.md "Die Pools").
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = stringResource(R.string.confirm_die_count),
-                        modifier = Modifier.weight(1f),
-                    )
-                    IconButton(
-                        onClick = { count-- },
-                        enabled = count > 1,
-                    ) {
-                        Icon(
-                            Icons.Default.Remove,
-                            contentDescription = stringResource(R.string.confirm_die_count_decrement),
-                        )
-                    }
-                    Text(text = count.toString())
-                    IconButton(onClick = { count++ }) {
-                        Icon(
-                            Icons.Default.Add,
-                            contentDescription = stringResource(R.string.confirm_die_count_increment),
-                        )
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = { onConfirm(name, count) }, enabled = name.isNotBlank()) {
-                Text(stringResource(R.string.confirm_register_action))
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.dialog_cancel)) }
-        },
-    )
 }
 
 /**
@@ -564,7 +513,7 @@ private fun DicePalette(
     activeDieId: Long?,
     fullDieIds: Set<Long>,
     onSelect: (Long) -> Unit,
-    onRegister: (String, Int) -> Unit,
+    onRegister: (String, Int, Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var showRegisterDialog by remember { mutableStateOf(false) }
@@ -619,9 +568,9 @@ private fun DicePalette(
     if (showRegisterDialog) {
         RegisterDieDialog(
             onDismiss = { showRegisterDialog = false },
-            onConfirm = { name, count ->
+            onConfirm = { name, faces, count ->
                 showRegisterDialog = false
-                onRegister(name, count)
+                onRegister(name, faces, count)
             },
         )
     }

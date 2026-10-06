@@ -33,6 +33,12 @@ data class ConfirmedDie(
     val colorSignature: DieColorSignature? = null,
 )
 
+/** One manually-entered die result (no photo, no bounding box). */
+data class ManualDie(
+    val dieId: Long,
+    val value: Int,
+)
+
 @Singleton
 class DiceRepository @Inject constructor(
     private val dieDao: DieDao,
@@ -100,18 +106,51 @@ class DiceRepository @Inject constructor(
             values.filter { type.isValidValue(it) }
         }
 
-    /** Registers a die; [count] > 1 makes it a pool of interchangeable dice. */
     /** Distinct rolls a die appears in (for pools this is fewer than its throw count). */
     fun rollCountForDie(dieId: Long): Flow<Int> = dieDao.observeRollCountForDie(dieId)
 
-    suspend fun registerDie(name: String, count: Int = 1): Long =
+    /**
+     * Registers a die of [faces]-sided type; [count] > 1 makes it a pool of interchangeable
+     * dice.
+     */
+    suspend fun registerDie(
+        name: String,
+        faces: Int = DieType.DEFAULT.faces,
+        count: Int = 1,
+    ): Long =
         dieDao.insert(
             DieEntity(
                 name = name,
+                faces = faces,
                 count = count.coerceAtLeast(1),
                 createdAt = System.currentTimeMillis(),
             ),
         )
+
+    /**
+     * Persists a manually-entered (photo-less) roll: one [DieResultEntity] per value with an
+     * empty bounding box and full confidence (the user typed it). Tagged to the open game
+     * like any other roll. Returns the new roll id.
+     */
+    suspend fun saveManualRoll(capturedAt: Long, dice: List<ManualDie>): Long {
+        val gameId = gameDao.activeGameId()
+        val rollId = rollDao.insertRoll(
+            RollEntity(photoPath = null, capturedAt = capturedAt, gameId = gameId),
+        )
+        rollDao.insertResults(
+            dice.map { die ->
+                DieResultEntity(
+                    rollId = rollId,
+                    dieId = die.dieId,
+                    value = die.value,
+                    confidence = 1f,
+                    boundingBox = "",
+                    wasCorrected = false,
+                )
+            },
+        )
+        return rollId
+    }
 
     /** Persists a roll and its per-die results; returns the new roll id. */
     suspend fun saveRoll(photoPath: String, capturedAt: Long, dice: List<ConfirmedDie>): Long {

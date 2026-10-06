@@ -56,7 +56,7 @@ interface RollDao {
     @Query("SELECT * FROM rolls WHERE gameId = :gameId ORDER BY capturedAt DESC")
     fun observeRollsWithResultsForGame(gameId: Long): Flow<List<RollWithResults>>
 
-    @Query("SELECT photoPath FROM rolls WHERE id IN (:ids)")
+    @Query("SELECT photoPath FROM rolls WHERE id IN (:ids) AND photoPath IS NOT NULL")
     suspend fun photoPathsFor(ids: List<Long>): List<String>
 
     @Query("DELETE FROM rolls WHERE id IN (:ids)")

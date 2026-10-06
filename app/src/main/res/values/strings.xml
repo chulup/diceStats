@@ -1,9 +1,11 @@
 <resources>
     <string name="app_name">DiceStats</string>
     <string name="back">Back</string>
-    <string name="roll_log_capture">Roll</string>
-    <string name="roll_log_empty">No rolls yet. Tap Roll to capture one.</string>
+    <string name="roll_log_capture">Take photo</string>
+    <string name="roll_log_manual">Manual roll</string>
+    <string name="roll_log_empty">No rolls yet. Tap Take photo or Manual roll to add one.</string>
     <string name="roll_photo_desc">Roll photo</string>
+    <string name="roll_manual_desc">Manually-entered roll</string>
     <string name="roll_summary_with_sum">(Σ %1$d), %2$s</string>
     <string name="selection_clear">Clear selection</string>
     <string name="selection_delete">Delete selected</string>
@@ -44,7 +46,23 @@
     <string name="confirm_die_count_decrement">Fewer dice</string>
     <string name="confirm_die_count_increment">More dice</string>
     <string name="confirm_register_action">Register</string>
+    <string name="register_die_type">Die type</string>
+    <string name="die_type_label">d%1$d</string>
     <string name="die_name_with_count">%1$s ×%2$d</string>
+
+    <!-- Manual roll entry -->
+    <string name="manual_roll_title">Manual roll</string>
+    <string name="manual_roll_save">Save</string>
+    <string name="manual_roll_next">Next roll</string>
+    <string name="manual_roll_backspace">Backspace</string>
+    <string name="manual_roll_enter">Enter value</string>
+    <string name="manual_roll_no_die">Pick a die above, then tap its value.</string>
+    <string name="manual_roll_empty">Tap a die, then tap values to build a roll.</string>
+    <string name="manual_roll_register">New die</string>
+    <string name="manual_roll_line_values">%1$s: %2$s</string>
+    <string name="manual_roll_discard_title">Discard rolls?</string>
+    <string name="manual_roll_discard_message">You have unsaved rolls. Discard them?</string>
+    <string name="manual_roll_discard_confirm">Discard</string>
     <string name="confirm_remove_die">Remove die</string>
     <string name="palette_hint">Tap a die in the photo to label it the highlighted die; the highlight then advances.</string>
     <string name="palette_new_die">New die</string>

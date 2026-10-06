@@ -97,10 +97,11 @@ class DbBenchmarkTest {
                     .mapNotNull { r -> parseBox(r.boundingBox)?.let { it to r } }
                 if (truth.isEmpty()) continue
 
-                val bitmap = decodeOriented(roll.roll.photoPath)
+                val photoPath = roll.roll.photoPath ?: continue
+                val bitmap = decodeOriented(photoPath)
                 if (bitmap == null) {
                     missingPhotos++
-                    Log.w(LOG_TAG, "roll ${roll.roll.id}: could not decode ${roll.roll.photoPath}")
+                    Log.w(LOG_TAG, "roll ${roll.roll.id}: could not decode $photoPath")
                     continue
                 }
                 images++
