@@ -34,7 +34,7 @@ class YoloDecodeTest {
         out.release()
 
         assertEquals(1, boxes.size)
-        assertBox(boxes[0], 0.10f, 0.20f, 0.30f, 0.40f)
+        assertBox(boxes[0].box, 0.10f, 0.20f, 0.30f, 0.40f)
     }
 
     @Test
@@ -50,7 +50,7 @@ class YoloDecodeTest {
         out.release()
 
         assertEquals(1, boxes.size)
-        assertBox(boxes[0], 0.10f, 0.20f, 0.30f, 0.40f)
+        assertBox(boxes[0].box, 0.10f, 0.20f, 0.30f, 0.40f)
     }
 
     @Test
@@ -64,6 +64,21 @@ class YoloDecodeTest {
         out.release()
 
         assertEquals(1, boxes.size)
+    }
+
+    @Test
+    fun keepsBestClassId() {
+        // RAW with 6 classes (d6-1..d6-6): class 4 (= value 5) outscores class 1 on the same anchor.
+        val out = Mat(10, 20, opencv_core.CV_32F, Scalar(0.0))
+        putBox(out, anchor = 0, cx = 128f, cy = 256f, w = 128f, h = 64f, scoreFeature = 4 + 1, score = 0.4f)
+        putBox(out, anchor = 0, cx = 128f, cy = 256f, w = 128f, h = 64f, scoreFeature = 4 + 4, score = 0.8f)
+
+        val dets = YoloDetectionPipeline.decode(out, 100, 50, 6.4, 0, 160, params)
+        out.release()
+
+        assertEquals(1, dets.size)
+        assertEquals(4, dets[0].classId)
+        assertEquals(0.8f, dets[0].score, 1e-6f)
     }
 
     private fun putBox(

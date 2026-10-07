@@ -18,8 +18,9 @@ import kotlin.math.roundToInt
  * whose natives load on Android **and** the desktop JVM — so this is unit-testable exactly like
  * [DiceDetectionPipeline] / `PipCounter`, and A/B-benchmarkable in `DetectionStatsReport`).
  *
- * Carries no Android types: it takes an RGBA [Mat] plus a loaded [Net] and returns normalized
- * [BoundingBox]es. `YoloDieDetector` wraps it with the on-device asset/`Bitmap` plumbing.
+ * Carries no Android types: it takes an RGBA [Mat] plus a loaded [Net] and returns [Detection]s
+ * (normalized [BoundingBox] + score + class id). `YoloDieDetector` wraps it with the on-device
+ * asset/`Bitmap` plumbing and maps class ids to die values.
  *
  * ## Model contract
  * An Ultralytics YOLO detection model exported to ONNX (`yolo export format=onnx opset=12`),
@@ -31,8 +32,9 @@ import kotlin.math.roundToInt
  *  - **END_TO_END** `[1, N, 6]` — an NMS-free export (`nms=True` / the v10+/26 end-to-end head).
  *    Each row is `x1,y1,x2,y2,conf,cls` in input pixels, already de-duplicated.
  *
- * The trained model does not exist yet; when it lands, confirm the real export's output shape and
- * class map against [Params] and this decoder (the geometry is unit-tested in `YoloDecodeTest`).
+ * The DiceStats model (`../training`, YOLO26) exports RAW `[1, 10, 8400]`: classes `d6-1`..`d6-6`,
+ * i.e. class id = top-face value − 1. NMS is class-agnostic — one die gets one box, whichever
+ * value scores highest.
  */
 object YoloDetectionPipeline {
 
@@ -58,8 +60,8 @@ object YoloDetectionPipeline {
         val layout: Layout = Layout.AUTO,
     )
 
-    /** One decoded detection in normalized-plus-score form, before NMS. */
-    private class Candidate(
+    /** One decoded detection: normalized [box], its best class [score] and [classId]. */
+    data class Detection(
         val box: BoundingBox,
         val score: Float,
         val classId: Int,
@@ -70,7 +72,7 @@ object YoloDetectionPipeline {
      * Recall-oriented like the classical detector — thresholds stay permissive; the confirm
      * screen prunes false positives.
      */
-    fun detect(rgba: Mat, net: Net, params: Params = Params()): List<BoundingBox> {
+    fun detect(rgba: Mat, net: Net, params: Params = Params()): List<Detection> {
         val srcW = rgba.cols()
         val srcH = rgba.rows()
         if (srcW == 0 || srcH == 0) return emptyList()
@@ -114,7 +116,7 @@ object YoloDetectionPipeline {
     }
 
     /**
-     * Pure decoder: turn a network [output] Mat into normalized boxes. Split out (and taking the
+     * Pure decoder: turn a network [output] Mat into normalized detections. Split out (and taking the
      * letterbox transform as plain scalars) so the geometry is unit-testable without a model.
      */
     fun decode(
@@ -125,7 +127,7 @@ object YoloDetectionPipeline {
         padX: Int,
         padY: Int,
         params: Params,
-    ): List<BoundingBox> {
+    ): List<Detection> {
         val dims = output.dims()
         // Content dims are the trailing two; a leading unit batch dim (dims == 3) is prefixed 0.
         val d1 = output.size(dims - 2)
@@ -143,7 +145,7 @@ object YoloDetectionPipeline {
         }
 
         val indexer = output.createIndexer<FloatIndexer>(true)
-        val candidates = ArrayList<Candidate>()
+        val candidates = ArrayList<Detection>()
         try {
             fun at(feature: Int, row: Int): Float {
                 val i0 = if (featuresAlongFirst) feature else row
@@ -180,7 +182,7 @@ object YoloDetectionPipeline {
                 if (params.keepClasses != null && classId !in params.keepClasses) continue
 
                 val box = toNormalized(cx, cy, w, h, srcW, srcH, scale, padX, padY) ?: continue
-                candidates.add(Candidate(box, score, classId))
+                candidates.add(Detection(box, score, classId))
             }
         } finally {
             indexer.release()
@@ -205,13 +207,13 @@ object YoloDetectionPipeline {
     }
 
     /** Greedy IoU non-max suppression, highest score first. Harmless (a no-op) on end-to-end output. */
-    private fun nonMaxSuppression(candidates: List<Candidate>, iouThreshold: Float): List<BoundingBox> {
+    private fun nonMaxSuppression(candidates: List<Detection>, iouThreshold: Float): List<Detection> {
         val sorted = candidates.sortedByDescending { it.score }
-        val kept = ArrayList<Candidate>()
+        val kept = ArrayList<Detection>()
         for (cand in sorted) {
             if (kept.none { iou(it.box, cand.box) > iouThreshold }) kept.add(cand)
         }
-        return kept.map { it.box }
+        return kept
     }
 
     private fun iou(a: BoundingBox, b: BoundingBox): Float {

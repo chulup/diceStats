@@ -16,3 +16,12 @@ import android.graphics.Bitmap
 interface DieDetector {
     suspend fun detect(bitmap: Bitmap): List<BoundingBox>
 }
+
+/**
+ * A [DieDetector] that also reads each die's top-face value in the same pass — e.g. a YOLO model
+ * whose classes are the values. [DieRecognizer] prefers these values over [PipCounter]'s.
+ */
+interface ValueReadingDieDetector : DieDetector {
+    /** Every die in [bitmap] with its value, or a null value when the detector can't name one. */
+    suspend fun detectDice(bitmap: Bitmap): List<DetectedDie>
+}

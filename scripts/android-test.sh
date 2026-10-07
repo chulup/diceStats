@@ -12,7 +12,10 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 export PATH="$HOME/Android/Sdk/build-tools/36.1.0/:$HOME/Android/Sdk/platform-tools:$PATH"
-export ADB_SERVER_SOCKET="tcp:$(ip route show default | awk '{print $3}'):5037"
+# Under WSL, adb talks to the Windows host's ADB server; elsewhere the local one is used.
+if grep -qi microsoft /proc/version; then
+    export ADB_SERVER_SOCKET="tcp:$(ip route show default | awk '{print $3}'):5037"
+fi
 
 ./gradlew :app:assembleDebug :app:assembleDebugAndroidTest
 

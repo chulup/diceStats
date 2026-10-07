@@ -13,9 +13,10 @@ import org.bytedeco.opencv.opencv_dnn.Net
 import xyz.chulup.dicestats.recognition.internal.YoloDetectionPipeline
 
 /**
- * On-device [DieDetector] backed by a YOLO model run through OpenCV's `dnn` module
+ * On-device [ValueReadingDieDetector] backed by a YOLO model run through OpenCV's `dnn` module
  * ([YoloDetectionPipeline]). The intended replacement for [ClassicalDieDetector] once the
  * `yolo26n-dice.onnx` model has been trained (see `design-records/2026-07-08-yolo-detector-opencv-dnn.md`).
+ * Each class is a top-face value ([classValues]), so detection also reads the die.
  *
  * The model ships as an app asset ([MODEL_ASSET]). It is loaded lazily on the first [detect] and
  * cached. **If the asset is absent** — as it is until the model is trained — [detect] returns an
@@ -29,19 +30,25 @@ class YoloDieDetector(
     private val context: Context,
     private val assetName: String = MODEL_ASSET,
     private val params: YoloDetectionPipeline.Params = YoloDetectionPipeline.Params(),
-) : DieDetector {
+    /** Die value per model class id; ids outside the list yield a null value. */
+    private val classValues: List<Int> = CLASS_VALUES,
+) : ValueReadingDieDetector {
 
     @Volatile private var net: Net? = null
     @Volatile private var loadAttempted = false
 
-    override suspend fun detect(bitmap: Bitmap): List<BoundingBox> = withContext(Dispatchers.Default) {
+    override suspend fun detect(bitmap: Bitmap): List<BoundingBox> = detectDice(bitmap).map { it.boundingBox }
+
+    override suspend fun detectDice(bitmap: Bitmap): List<DetectedDie> = withContext(Dispatchers.Default) {
         val model = ensureNet() ?: return@withContext emptyList()
 
         // ARGB_8888 is stored R,G,B,A in memory, matching CV_8UC4 — copy straight in (as PipCounter does).
         val rgba = Mat(bitmap.height, bitmap.width, opencv_core.CV_8UC4)
         bitmap.copyPixelsToBuffer(rgba.data().capacity(bitmap.byteCount.toLong()).asByteBuffer())
         try {
-            YoloDetectionPipeline.detect(rgba, model, params)
+            YoloDetectionPipeline.detect(rgba, model, params).map {
+                DetectedDie(value = classValues.getOrNull(it.classId), boundingBox = it.box)
+            }
         } finally {
             rgba.release()
         }
@@ -72,6 +79,9 @@ class YoloDieDetector(
     companion object {
         /** App-asset filename of the exported ONNX model. Drop the trained model here to enable YOLO. */
         const val MODEL_ASSET = "yolo26n-dice.onnx"
+
+        /** Training class order `d6-1`..`d6-6` (`../training/export_yolo.py` CLASSES). */
+        val CLASS_VALUES = listOf(1, 2, 3, 4, 5, 6)
 
         private const val TAG = "YoloDieDetector"
 
