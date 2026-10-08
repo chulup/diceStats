@@ -25,6 +25,7 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -38,6 +39,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import xyz.chulup.dicestats.data.photo.PhotoStorage
+import xyz.chulup.dicestats.data.sensor.SensorRecorder
 
 private const val TAG = "CaptureScreen"
 
@@ -78,6 +80,11 @@ private fun CameraCapture(onPhotoSaved: (String) -> Unit) {
     val lifecycleOwner = LocalLifecycleOwner.current
     val storage = remember { PhotoStorage(context) }
     val imageCapture = remember { ImageCapture.Builder().build() }
+    val sensors = remember { SensorRecorder(context) }
+    DisposableEffect(sensors) {
+        sensors.start()
+        onDispose { sensors.stop() }
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         AndroidView(
@@ -105,12 +112,14 @@ private fun CameraCapture(onPhotoSaved: (String) -> Unit) {
         FloatingActionButton(
             onClick = {
                 val file = storage.newPhotoFile()
+                sensors.markShutter()
                 val output = ImageCapture.OutputFileOptions.Builder(file).build()
                 imageCapture.takePicture(
                     output,
                     ContextCompat.getMainExecutor(context),
                     object : ImageCapture.OnImageSavedCallback {
                         override fun onImageSaved(results: ImageCapture.OutputFileResults) {
+                            storage.writeSensors(file, sensors.snapshot().toString())
                             onPhotoSaved(file.absolutePath)
                         }
 

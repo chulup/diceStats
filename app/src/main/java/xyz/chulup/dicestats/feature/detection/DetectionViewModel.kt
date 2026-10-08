@@ -6,12 +6,18 @@ import android.graphics.BitmapRegionDecoder
 import android.graphics.Matrix
 import android.graphics.Rect
 import android.media.ExifInterface
+import android.os.SystemClock
 import android.util.Log
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import xyz.chulup.dicestats.data.ConfirmedDie
+import xyz.chulup.dicestats.data.eval.ConfirmSession
+import xyz.chulup.dicestats.data.eval.ConfirmedBox
+import xyz.chulup.dicestats.data.eval.DieOrigin
+import xyz.chulup.dicestats.data.eval.ModelEvalLog
+import xyz.chulup.dicestats.data.photo.sensorsFile
 import xyz.chulup.dicestats.data.DiceRepository
 import xyz.chulup.dicestats.data.DieType
 import xyz.chulup.dicestats.data.db.DieEntity
@@ -20,8 +26,11 @@ import xyz.chulup.dicestats.recognition.DieColorAnalyzer
 import xyz.chulup.dicestats.recognition.DieColorSignature
 import xyz.chulup.dicestats.recognition.DieIdentifier
 import xyz.chulup.dicestats.recognition.DieRecognizer
+import xyz.chulup.dicestats.recognition.ModelRun
 import xyz.chulup.dicestats.recognition.mapOrientedRegionToRaw
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -31,6 +40,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -48,6 +58,12 @@ data class DieAssignment(
     val signature: DieColorSignature? = null,
     /** True once the user has set the value (used to resolve an unread "?" die). */
     val edited: Boolean = false,
+    /** Recognition judged the die too blurry to read reliably ([xyz.chulup.dicestats.recognition.BlurDetector]). */
+    val blurry: Boolean = false,
+    /** How this die was found — logged with the model comparison ([ModelEvalLog]). */
+    val origin: DieOrigin = DieOrigin.DETECTED,
+    /** The user dragged this box (logged). */
+    val moved: Boolean = false,
 ) {
     /** Whether a definite value is established (auto-recognized or user-set). */
     val hasValue: Boolean get() = recognizedValue != null || edited
@@ -343,11 +359,36 @@ class DetectionViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val repository: DiceRepository,
     private val recognizer: DieRecognizer,
+    private val evalLog: ModelEvalLog,
 ) : ViewModel() {
 
     /** The working photo — starts as the capture, becomes the crop when re-detecting. */
     private var currentPhotoPath: String =
         savedStateHandle.get<String>(ARG_PHOTO_PATH) ?: error("photoPath argument required")
+
+    /**
+     * The model comparison for the current photo: the shown model's pass, plus the shadow
+     * models' passes still running in the background. Logged on [save].
+     */
+    private class EvalCapture(
+        val width: Int,
+        val height: Int,
+        val cropped: Boolean,
+        val shown: ModelRun?,
+        /** The voters' own runs behind a 2-of-3 consensus ([shown]); empty otherwise. */
+        val votes: List<ModelRun>,
+        val shadows: Deferred<List<ModelRun>>?,
+    )
+
+    @Volatile private var eval: EvalCapture? = null
+
+    /** Confirm-screen effort for the current photo, logged on save ([ConfirmSession]). */
+    private var openedAt = 0L
+    private var readyAt = 0L
+    private var removedCount = 0
+    private var addedCount = 0
+    private var valueEditCount = 0
+    private var redetectCount = 0
 
     private val colorAnalyzer = DieColorAnalyzer()
     private val identifier = DieIdentifier()
@@ -380,14 +421,16 @@ class DetectionViewModel @Inject constructor(
     private fun recognize() {
         viewModelScope.launch {
             _uiState.value = DetectionUiState.Loading
+            openedAt = SystemClock.elapsedRealtime()
             val result = runCatching {
                 val bitmap = withContext(Dispatchers.Default) { decodeOriented(currentPhotoPath) }
                     ?: error("Could not decode photo")
-                val assignments = buildAssignments(bitmap, registeredDice.value)
+                val (assignments, recognition) = buildAssignments(bitmap, registeredDice.value, currentPhotoPath)
                 val ratio = bitmap.width.toFloat() / bitmap.height.toFloat()
-                bitmap.recycle()
+                startEval(bitmap, currentPhotoPath, recognition, cropped = false)
                 ratio to assignments
             }
+            readyAt = SystemClock.elapsedRealtime()
             _uiState.value = result.fold(
                 onSuccess = { (ratio, dice) ->
                     val registered = registeredDice.value
@@ -420,14 +463,16 @@ class DetectionViewModel @Inject constructor(
         val state = _uiState.value as? DetectionUiState.Ready ?: return
         if (state.detecting) return
         val previousPath = currentPhotoPath
+        redetectCount++
         _uiState.update { (it as DetectionUiState.Ready).copy(detecting = true) }
         viewModelScope.launch {
             val outcome = withContext(Dispatchers.Default) {
                 val crop = decodeRegion(previousPath, region) ?: return@withContext null
-                val dice = buildAssignments(crop, registeredDice.value)
-                val ratio = crop.width.toFloat() / crop.height.toFloat()
+                // Stored first: the two-stage voters crop from the file.
                 val newPath = repository.storePhoto(crop)
-                crop.recycle()
+                val (dice, recognition) = buildAssignments(crop, registeredDice.value, newPath)
+                val ratio = crop.width.toFloat() / crop.height.toFloat()
+                startEval(crop, newPath, recognition, cropped = true)
                 Triple(newPath, ratio, dice)
             }
             if (outcome == null) {
@@ -436,7 +481,10 @@ class DetectionViewModel @Inject constructor(
             }
             val (newPath, ratio, dice) = outcome
             currentPhotoPath = newPath
-            withContext(Dispatchers.IO) { runCatching { File(previousPath).delete() } }
+            withContext(Dispatchers.IO) {
+                runCatching { sensorsFile(previousPath).renameTo(sensorsFile(newPath)) }
+                runCatching { File(previousPath).delete() }
+            }
             _uiState.update { current ->
                 if (current !is DetectionUiState.Ready) return@update current
                 current.copy(
@@ -468,6 +516,7 @@ class DetectionViewModel @Inject constructor(
             TAG,
             "addDieAt: tap=(%.3f,%.3f) window=%s existing=%d".format(nx, ny, window.log(), existing.size),
         )
+        addedCount++
         _uiState.update { (it as DetectionUiState.Ready).copy(detecting = true) }
         viewModelScope.launch {
             val added = withContext(Dispatchers.Default) {
@@ -501,6 +550,8 @@ class DetectionViewModel @Inject constructor(
                                 dieId = guess?.dieId,
                                 dieIdConfidence = guess?.confidence,
                                 signature = signature,
+                                blurry = det.blurry,
+                                origin = DieOrigin.ADDED,
                             )
                         }
                         Log.i(
@@ -517,6 +568,7 @@ class DetectionViewModel @Inject constructor(
                     value = DEFAULT_VALUE,
                     recognizedValue = null,
                     dieId = null,
+                    origin = DieOrigin.PLACEHOLDER,
                 )
             }
             Log.i(
@@ -538,12 +590,17 @@ class DetectionViewModel @Inject constructor(
         }
     }
 
-    /** Builds confirm-screen assignments from a freshly detected [bitmap]. */
+    /**
+     * Builds confirm-screen assignments from a freshly detected [bitmap] (the photo at [photoPath],
+     * downscaled), with the recognition behind them — a 2-of-3 vote when configured.
+     */
     private suspend fun buildAssignments(
         bitmap: Bitmap,
         registered: List<DieEntity>,
-    ): List<DieAssignment> {
-        val detected = recognizer.recognize(bitmap)
+        photoPath: String,
+    ): Pair<List<DieAssignment>, DieRecognizer.Recognition> {
+        val recognition = recognizer.recognizeVoted(bitmap, photoPath)
+        val detected = recognition.dice
         val candidates = identityCandidatesFor(registered)
         val assignments = detected.map { det ->
             val signature = colorAnalyzer.signature(bitmap, det.boundingBox)
@@ -557,9 +614,64 @@ class DetectionViewModel @Inject constructor(
                 dieId = guess?.dieId,
                 dieIdConfidence = guess?.confidence,
                 signature = signature,
+                blurry = det.blurry,
             )
         }
-        return capAutoAssignments(assignments, registered)
+        return capAutoAssignments(assignments, registered) to recognition
+    }
+
+    /**
+     * Starts the model comparison for a new working photo: runs the shadow models on [bitmap]
+     * in the background (then recycles it) while the user confirms the dice.
+     */
+    private fun startEval(bitmap: Bitmap, photoPath: String, recognition: DieRecognizer.Recognition, cropped: Boolean) {
+        eval?.shadows?.cancel()
+        val (width, height) = bitmap.width to bitmap.height
+        val shadows = if (recognizer.hasShadows) {
+            viewModelScope.async(Dispatchers.Default) {
+                try {
+                    recognizer.runShadows(bitmap, photoPath)
+                } finally {
+                    bitmap.recycle()
+                }
+            }
+        } else {
+            bitmap.recycle()
+            null
+        }
+        eval = EvalCapture(width, height, cropped, recognition.run, recognition.votes, shadows)
+    }
+
+    /** Logs every model's pass on the saved photo against the confirmed dice; never fails the save. */
+    private suspend fun logEval(dice: List<DieAssignment>) {
+        val capture = eval ?: return
+        runCatching {
+            val shadows = capture.shadows?.let { withTimeoutOrNull(SHADOW_WAIT_MS) { it.await() } }.orEmpty()
+            val runs = listOfNotNull(capture.shown) + capture.votes + shadows
+            if (runs.isEmpty()) return
+            val known = recognizer.classifyKnown(currentPhotoPath, dice.map { it.boundingBox })
+            evalLog.record(
+                photo = currentPhotoPath,
+                width = capture.width,
+                height = capture.height,
+                cropped = capture.cropped,
+                shown = capture.shown?.model,
+                confirmed = dice.map {
+                    ConfirmedBox(it.boundingBox, it.value, it.recognizedValue, it.origin, it.blurry, it.edited, it.moved)
+                },
+                runs = runs,
+                sensors = readSensors(),
+                knownBoxes = known,
+                session = ConfirmSession(
+                    latencyMs = readyAt - openedAt,
+                    confirmMs = SystemClock.elapsedRealtime() - readyAt,
+                    removed = removedCount,
+                    added = addedCount,
+                    valueEdits = valueEditCount,
+                    redetects = redetectCount,
+                ),
+            )
+        }.onFailure { Log.w(TAG, "model eval log failed", it) }
     }
 
     /**
@@ -585,6 +697,7 @@ class DetectionViewModel @Inject constructor(
             val die = state.dice.getOrNull(index) ?: return@update state
             val type = die.dieTypeIn(state.registeredDice) ?: DieType.DEFAULT
             val clamped = value.coerceIn(type.minValue, type.maxValue)
+            if (clamped != die.value) valueEditCount++
             state.copy(
                 dice = state.dice.mapIndexed { i, d ->
                     if (i == index) d.copy(value = clamped, edited = true) else d
@@ -604,6 +717,7 @@ class DetectionViewModel @Inject constructor(
         }
         _uiState.update { state ->
             if (state !is DetectionUiState.Ready) return@update state
+            if (index in state.dice.indices) removedCount++
             state.copy(dice = state.dice.filterIndexed { i, _ -> i != index })
         }
     }
@@ -614,7 +728,7 @@ class DetectionViewModel @Inject constructor(
      * to the image; size is preserved.
      */
     fun moveDie(index: Int, dx: Float, dy: Float) =
-        updateDie(index) { it.copy(boundingBox = translateBoxClamped(it.boundingBox, dx, dy)) }
+        updateDie(index) { it.copy(boundingBox = translateBoxClamped(it.boundingBox, dx, dy), moved = true) }
 
     fun assignDie(index: Int, dieId: Long) = updateDie(index) { it.copy(dieId = dieId) }
 
@@ -679,6 +793,7 @@ class DetectionViewModel @Inject constructor(
                 )
             }
             repository.saveRoll(currentPhotoPath, System.currentTimeMillis(), confirmed)
+            logEval(state.dice)
             _uiState.update { (it as DetectionUiState.Ready).copy(saving = false, saved = true) }
         }
     }
@@ -702,6 +817,7 @@ class DetectionViewModel @Inject constructor(
         val json = JSONObject()
         json.put("reportedAt", System.currentTimeMillis())
         json.put("photo", File(currentPhotoPath).name)
+        readSensors()?.let { json.put("sensors", it) }
         when (val state = _uiState.value) {
             is DetectionUiState.Ready -> {
                 json.put("aspectRatio", state.aspectRatio.toDouble())
@@ -727,10 +843,15 @@ class DetectionViewModel @Inject constructor(
         return json.toString()
     }
 
+    /** The capture's phone-sensor snapshot (`.sensors.json` sidecar), if one was recorded. */
+    private fun readSensors(): JSONObject? =
+        runCatching { JSONObject(sensorsFile(currentPhotoPath).readText()) }.getOrNull()
+
     /** Deletes the captured photo when the user retakes or backs out without saving. */
     fun discardPhoto() {
         viewModelScope.launch(Dispatchers.IO) {
             runCatching { File(currentPhotoPath).delete() }
+            runCatching { sensorsFile(currentPhotoPath).delete() }
         }
     }
 
@@ -814,5 +935,6 @@ class DetectionViewModel @Inject constructor(
         private const val REGION_TARGET_MAX_EDGE = 1280
         private const val DEFAULT_VALUE = 1
         private const val ADD_DIE_FLASH_MS = 1500L
+        private const val SHADOW_WAIT_MS = 15_000L
     }
 }

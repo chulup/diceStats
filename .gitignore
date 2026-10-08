@@ -81,3 +81,6 @@ scratch_*/
 # Local data: device backup + generated training dataset (large binaries)
 backup/
 dataset/
+
+# Trained ONNX models are dropped in by hand (see app/src/main/assets/README-model.txt), not versioned
+app/src/main/assets/*.onnx

@@ -35,6 +35,8 @@
     <string name="report_unrecognized">Report</string>
     <string name="detect_region">Detect here</string>
     <string name="confirm_die_number">Die %1$d</string>
+    <string name="confirm_blurry_tag">blurry</string>
+    <string name="confirm_blurry_hint">Looks blurry — check the value or retake the photo.</string>
     <string name="confirm_decrement">Decrease value</string>
     <string name="confirm_increment">Increase value</string>
     <string name="confirm_choose_die">Choose die</string>

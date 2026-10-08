@@ -1,0 +1,92 @@
+{
+ "fixtures": [
+  {
+   "file": "blur_0.ppm",
+   "die_px": 142.70270270270294,
+   "features": {
+    "tenengrad": 19711.916015625,
+    "norm_grad": 2.1518588066101074,
+    "aniso": 0.9893851167467302
+   },
+   "probability": 3.6460859121785695e-05,
+   "blurry_label": false
+  },
+  {
+   "file": "blur_1.ppm",
+   "die_px": 290.59459459459447,
+   "features": {
+    "tenengrad": 11982.6884765625,
+    "norm_grad": 0.8432170152664185,
+    "aniso": 0.6584538309970864
+   },
+   "probability": 0.005317675952672623,
+   "blurry_label": false
+  },
+  {
+   "file": "blur_2.ppm",
+   "die_px": 67.60000000000008,
+   "features": {
+    "tenengrad": 4787.443359375,
+    "norm_grad": 1.664035439491272,
+    "aniso": 0.5253127160904927
+   },
+   "probability": 0.027828008788410866,
+   "blurry_label": false
+  },
+  {
+   "file": "blur_3.ppm",
+   "die_px": 137.0000000000001,
+   "features": {
+    "tenengrad": 3954.1949462890625,
+    "norm_grad": 0.7626789808273315,
+    "aniso": 0.5324605535081428
+   },
+   "probability": 0.15146131617781491,
+   "blurry_label": false
+  },
+  {
+   "file": "blur_4.ppm",
+   "die_px": 105.0,
+   "features": {
+    "tenengrad": 2365.198486328125,
+    "norm_grad": 1.0311030149459839,
+    "aniso": 0.2943630752100187
+   },
+   "probability": 0.5027323066677392,
+   "blurry_label": true
+  },
+  {
+   "file": "blur_5.ppm",
+   "die_px": 97.00000000000011,
+   "features": {
+    "tenengrad": 1988.114501953125,
+    "norm_grad": 1.2618751525878906,
+    "aniso": 0.12605289815788467
+   },
+   "probability": 0.7374098867928804,
+   "blurry_label": true
+  },
+  {
+   "file": "blur_6.ppm",
+   "die_px": 72.0,
+   "features": {
+    "tenengrad": 3357.5000610351562,
+    "norm_grad": 0.7633146643638611,
+    "aniso": 0.19047516096613742
+   },
+   "probability": 0.9067545353897101,
+   "blurry_label": true
+  },
+  {
+   "file": "blur_7.ppm",
+   "die_px": 54.0,
+   "features": {
+    "tenengrad": 1121.654052734375,
+    "norm_grad": 0.6157275438308716,
+    "aniso": 0.1833245530869949
+   },
+   "probability": 0.9886850493330324,
+   "blurry_label": true
+  }
+ ]
+}

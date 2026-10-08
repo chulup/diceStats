@@ -60,6 +60,11 @@ object YoloDetectionPipeline {
         val layout: Layout = Layout.AUTO,
     )
 
+    /** Wall-clock split of one [detectTimed] pass, in nanoseconds. */
+    data class Timings(val preprocessNs: Long, val forwardNs: Long, val decodeNs: Long) {
+        val totalNs: Long get() = preprocessNs + forwardNs + decodeNs
+    }
+
     /** One decoded detection: normalized [box], its best class [score] and [classId]. */
     data class Detection(
         val box: BoundingBox,
@@ -72,10 +77,15 @@ object YoloDetectionPipeline {
      * Recall-oriented like the classical detector — thresholds stay permissive; the confirm
      * screen prunes false positives.
      */
-    fun detect(rgba: Mat, net: Net, params: Params = Params()): List<Detection> {
+    fun detect(rgba: Mat, net: Net, params: Params = Params()): List<Detection> =
+        detectTimed(rgba, net, params).first
+
+    /** [detect], also reporting how long letterboxing, the forward pass and decoding took. */
+    fun detectTimed(rgba: Mat, net: Net, params: Params = Params()): Pair<List<Detection>, Timings> {
         val srcW = rgba.cols()
         val srcH = rgba.rows()
-        if (srcW == 0 || srcH == 0) return emptyList()
+        if (srcW == 0 || srcH == 0) return emptyList<Detection>() to Timings(0, 0, 0)
+        val t0 = System.nanoTime()
 
         val rgb = Mat()
         opencv_imgproc.cvtColor(rgba, rgb, opencv_imgproc.COLOR_RGBA2RGB)
@@ -104,9 +114,12 @@ object YoloDetectionPipeline {
         )
 
         return try {
+            val t1 = System.nanoTime()
             net.setInput(blob)
             val output = net.forward()
-            decode(output, srcW, srcH, scale, padX, padY, params)
+            val t2 = System.nanoTime()
+            val detections = decode(output, srcW, srcH, scale, padX, padY, params)
+            detections to Timings(t1 - t0, t2 - t1, System.nanoTime() - t2)
         } finally {
             rgb.release()
             resized.release()

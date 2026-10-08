@@ -54,6 +54,11 @@ class PhotoStorage(context: Context) {
         return photo
     }
 
+    /** Writes the phone-sensor snapshot for [photo] as its `.sensors.json` sidecar. */
+    fun writeSensors(photo: File, json: String) {
+        runCatching { sensorsFile(photo.path).writeText(json) }
+    }
+
     /** All stored roll photos, newest first. */
     fun listPhotos(): List<File> =
         rollsDir.listFiles { file -> file.isFile && file.extension == "jpg" }
@@ -65,7 +70,10 @@ class PhotoStorage(context: Context) {
         val dir = rollsDir
         for (path in paths) {
             val file = File(path)
-            if (file.parentFile == dir) file.delete()
+            if (file.parentFile == dir) {
+                file.delete()
+                sensorsFile(path).delete()
+            }
         }
     }
 
@@ -87,6 +95,9 @@ class PhotoStorage(context: Context) {
         const val REPORTS_DIR_NAME = "unrecognized"
     }
 }
+
+/** The `.sensors.json` sidecar of a roll photo ([xyz.chulup.dicestats.data.sensor.SensorRecorder]). */
+fun sensorsFile(photoPath: String): File = File(photoPath.substringBeforeLast('.') + ".sensors.json")
 
 /** Formats [date] as a `YYYY-MM-dd_HH:mm:ss` filename stamp (local time, fixed Locale). */
 internal fun formatStamp(date: Date): String =

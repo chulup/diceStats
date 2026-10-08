@@ -121,3 +121,18 @@ confirmed with three taps or auto-assignment, and the pool pages show pooled
 distributions with an honest pool-level fairness verdict.
 </content>
 </invoke>
+
+## Two-stage recognition & model comparison (2026-10-08)
+
+See [design record](design-records/2026-10-08-two-stage-recognition-consensus.md).
+
+- [x] Taken photos are read by a 2-of-3 vote (`DieRecognizer.recognizeVoted`, `Consensus`):
+      v3 m one-stage + one-class detector → full-res crop (`DieCropper`) → value classifier
+      (`ValueClassifier`), in n and s pairs (`TwoStageRecognizer`). Split votes show "?".
+- [x] Model comparison log `files/model-eval/log.jsonl` (`ModelEvalLog`): every pipeline's dice
+      and timings, the confirmed dice, classifier readings at confirmed positions, confirm-session
+      effort, model files. Summary: `../training/app_eval_report.py --pull`.
+- [x] Phone sensors per capture (`SensorRecorder`, `.sensors.json` sidecar): gravity, tilt,
+      shake during exposure, light.
+- [x] `TwoStageBenchmarkTest`: replays every saved roll through all pipelines on the device.
+- [x] JavaCPP's 1 GB memory cap lifted (`maxPhysicalBytes=0`); comparison runs can't crash recognition.

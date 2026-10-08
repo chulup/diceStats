@@ -2,6 +2,9 @@ package xyz.chulup.dicestats.recognition
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.os.Build
+import android.os.PowerManager
+import android.os.SystemClock
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -30,29 +33,64 @@ class YoloDieDetector(
     private val context: Context,
     private val assetName: String = MODEL_ASSET,
     private val params: YoloDetectionPipeline.Params = YoloDetectionPipeline.Params(),
-    /** Die value per model class id; ids outside the list yield a null value. */
+    /** Die value per model class id; ids outside the list yield a null value (one-class "die": empty). */
     private val classValues: List<Int> = CLASS_VALUES,
-) : ValueReadingDieDetector {
+) : ValueReadingDieDetector, DicePipeline {
 
     @Volatile private var net: Net? = null
     @Volatile private var loadAttempted = false
+    @Volatile private var loadMs: Double? = null
+    private var runs = 0
+
+    /** The model asset this detector runs, as named in [ModelRun.model]. */
+    val modelName: String get() = assetName
+
+    override val name: String get() = assetName
+
+    override suspend fun run(bitmap: Bitmap, photoPath: String): ModelRun? = detectTimed(bitmap)
 
     override suspend fun detect(bitmap: Bitmap): List<BoundingBox> = detectDice(bitmap).map { it.boundingBox }
 
-    override suspend fun detectDice(bitmap: Bitmap): List<DetectedDie> = withContext(Dispatchers.Default) {
-        val model = ensureNet() ?: return@withContext emptyList()
+    override suspend fun detectDice(bitmap: Bitmap): List<DetectedDie> = detectTimed(bitmap)?.dice ?: emptyList()
 
-        // ARGB_8888 is stored R,G,B,A in memory, matching CV_8UC4 — copy straight in (as PipCounter does).
-        val rgba = Mat(bitmap.height, bitmap.width, opencv_core.CV_8UC4)
-        bitmap.copyPixelsToBuffer(rgba.data().capacity(bitmap.byteCount.toLong()).asByteBuffer())
-        try {
-            YoloDetectionPipeline.detect(rgba, model, params).map {
-                DetectedDie(value = classValues.getOrNull(it.classId), boundingBox = it.box)
+    /**
+     * [detectDice] with timings for the model comparison; null when the model isn't loaded.
+     * Passes are serialized per detector, so a timing never includes another pass of the same net.
+     */
+    suspend fun detectTimed(bitmap: Bitmap): ModelRun? = withContext(Dispatchers.Default) {
+        synchronized(this@YoloDieDetector) {
+            val model = ensureNet() ?: return@withContext null
+            val load = loadMs.also { loadMs = null }
+
+            // ARGB_8888 is stored R,G,B,A in memory, matching CV_8UC4 — copy straight in (as PipCounter does).
+            val t0 = System.nanoTime()
+            val rgba = Mat(bitmap.height, bitmap.width, opencv_core.CV_8UC4)
+            bitmap.copyPixelsToBuffer(rgba.data().capacity(bitmap.byteCount.toLong()).asByteBuffer())
+            val copyNs = System.nanoTime() - t0
+            try {
+                val (detections, t) = YoloDetectionPipeline.detectTimed(rgba, model, params)
+                ModelRun(
+                    model = assetName,
+                    dice = detections.map {
+                        DetectedDie(value = classValues.getOrNull(it.classId), boundingBox = it.box, score = it.score)
+                    },
+                    runIndex = runs++,
+                    loadMs = load,
+                    preprocessMs = (copyNs + t.preprocessNs) / 1e6,
+                    inferenceMs = t.forwardNs / 1e6,
+                    decodeMs = t.decodeNs / 1e6,
+                    thermalStatus = thermalStatus(),
+                )
+            } finally {
+                rgba.release()
             }
-        } finally {
-            rgba.release()
         }
     }
+
+    /** `PowerManager.currentThermalStatus`, or -1 below API 29 / when unavailable. */
+    private fun thermalStatus(): Int =
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) -1
+        else runCatching { context.getSystemService(PowerManager::class.java).currentThermalStatus }.getOrDefault(-1)
 
     /** Load and cache the [Net] on first use; null (once) when the asset is missing or unparseable. */
     private fun ensureNet(): Net? {
@@ -60,7 +98,9 @@ class YoloDieDetector(
         synchronized(this) {
             if (!loadAttempted) {
                 loadAttempted = true
+                val start = SystemClock.elapsedRealtimeNanos()
                 net = loadNet()
+                if (net != null) loadMs = (SystemClock.elapsedRealtimeNanos() - start) / 1e6
             }
         }
         return net
@@ -79,6 +119,13 @@ class YoloDieDetector(
     companion object {
         /** App-asset filename of the exported ONNX model. Drop the trained model here to enable YOLO. */
         const val MODEL_ASSET = "yolo26n-dice.onnx"
+
+        /**
+         * Model assets in order of preference. The first one present drives recognition; every
+         * other present one runs in the background on the same photo for comparison
+         * (`ModelEvalLog`). Ship a single asset for a normal build.
+         */
+        val MODEL_ASSETS = listOf("yolo26m-dice.onnx", "yolo26s-dice.onnx", MODEL_ASSET)
 
         /** Training class order `d6-1`..`d6-6` (`../training/export_yolo.py` CLASSES). */
         val CLASS_VALUES = listOf(1, 2, 3, 4, 5, 6)

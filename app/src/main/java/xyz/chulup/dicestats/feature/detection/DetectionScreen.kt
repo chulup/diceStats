@@ -447,6 +447,13 @@ private fun DieRow(
                     Icon(Icons.Default.Close, contentDescription = stringResource(R.string.confirm_remove_die))
                 }
             }
+            if (die.blurry && !die.edited) {
+                Text(
+                    text = stringResource(R.string.confirm_blurry_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
 
             val selectedName = registeredDice.firstOrNull { it.id == die.dieId }?.name
                 ?: stringResource(R.string.confirm_choose_die)
@@ -633,6 +640,7 @@ private fun DiceOverlay(
     modifier: Modifier = Modifier,
 ) {
     val density = LocalDensity.current
+    val blurryTag = stringResource(R.string.confirm_blurry_tag)
     Canvas(modifier = modifier) {
         // Drawn outside the photo's zoom layer: stroke and text are plain screen pixels
         // (no counter-scaling). Each normalized coordinate is mapped to the screen with the
@@ -667,7 +675,8 @@ private fun DiceOverlay(
             // identified), plus the value. Never overlaps the die itself.
             val who = nameFor(die.dieId) ?: "${index + 1}"
             val valueText = if (die.hasValue) die.value.toString() else "?"
-            val label = "$who: $valueText"
+            // Flag a die read from a blurry crop until the user confirms its value.
+            val label = "$who: $valueText" + if (die.blurry && !die.edited) " · $blurryTag" else ""
             val paint = AndroidPaint().apply {
                 this.color = AndroidColor.BLACK
                 this.textSize = labelSize
