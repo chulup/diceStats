@@ -38,6 +38,10 @@ interface DieDao {
 
     @Insert
     suspend fun insert(die: DieEntity): Long
+
+    /** Results referencing the die keep their rows with a null `dieId` (FK SET_NULL). */
+    @Query("DELETE FROM dice WHERE id = :dieId")
+    suspend fun delete(dieId: Long)
 }
 
 @Dao

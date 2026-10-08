@@ -75,6 +75,7 @@ fun RollLogScreen(
     onCapture: () -> Unit,
     onManualRoll: () -> Unit,
     onDiceStats: () -> Unit,
+    onManageDice: () -> Unit,
     viewModel: RollLogViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -108,6 +109,9 @@ fun RollLogScreen(
                 TopAppBar(
                     title = { Text(stringResource(R.string.app_name)) },
                     actions = {
+                        IconButton(onClick = onManageDice) {
+                            Icon(Icons.Default.Casino, contentDescription = stringResource(R.string.dice_manage_title))
+                        }
                         IconButton(onClick = onDiceStats) {
                             Icon(Icons.Default.BarChart, contentDescription = stringResource(R.string.dice_list_title))
                         }

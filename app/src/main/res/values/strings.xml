@@ -73,6 +73,11 @@
         <item quantity="other">%1$d dice detected</item>
     </plurals>
     <string name="dice_list_title">Dice</string>
+    <string name="dice_manage_title">My dice</string>
+    <string name="dice_manage_delete">Delete die</string>
+    <string name="dice_manage_delete_title">Delete %1$s?</string>
+    <string name="dice_manage_delete_message">The die is removed from your list. Rolls already recorded are kept, but no longer attributed to it.</string>
+    <string name="dice_manage_picture_desc">Photo of the die</string>
     <string name="stats_title">Stats</string>
     <string name="stats_category_sum">Sum</string>
     <string name="stats_category_sum_desc">Roll total distribution</string>

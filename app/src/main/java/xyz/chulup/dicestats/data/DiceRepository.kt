@@ -196,6 +196,9 @@ class DiceRepository @Inject constructor(
         }
     }
 
+    /** Deletes a registered die; its recorded results stay, detached from any die. */
+    suspend fun deleteDie(dieId: Long) = dieDao.delete(dieId)
+
     /** Deletes rolls (cascading to their results) and their photo files. */
     suspend fun deleteRolls(rollIds: List<Long>) {
         if (rollIds.isEmpty()) return
